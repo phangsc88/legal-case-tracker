@@ -12,7 +12,8 @@ from db.queries import (
     db_update_task_template,
 )
 from utils.performance import calculate_task_performance  # if used
-
+# bring in your shared DataTable‐style and theme
+from utils.styles import DATATABLE_STYLE_DARK, DARK_THEME
 
 
 # UPDATED (Bug Fix)

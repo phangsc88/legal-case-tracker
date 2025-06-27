@@ -1,37 +1,51 @@
-# app.py (Final Version with Bug Fix & Delete Template Feature) - Lexus version
+import os
+
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html, dash_table, Input, Output, State, callback, ctx, ALL
-import psycopg2
-import pandas as pd
-from datetime import datetime, date, timedelta
-from typing import List, Dict, Any, Optional, Tuple
-import calendar
-from sqlalchemy import text
-import os
+import dash_mantine_components as dmc
+import plotly.express as px
+import plotly.io as pio
+from flask import send_from_directory
 import uuid
 import base64
+import pandas as pd
+import calendar
+from datetime import date, datetime, timedelta
 
-from layouts.user_management import build_user_management_layout
+# =============================================================================
+# Shared theme & DataTable styles for dark mode
+# =============================================================================
+from utils.styles import DARK_THEME, DATATABLE_STYLE_DARK
 
-from layouts.login import build_login_layout
-
-from layouts.reports import build_date_report_layout
-
-
-from layouts.dashboard import build_dashboard_layout
-
-from layouts.calendar import build_calendar_layout
-
-from layouts.case_detail import build_case_detail_layout
-
-from layouts.templates import build_templates_layout
-
+# =============================================================================
+# Shared performance calculators
+# =============================================================================
 from utils.performance import calculate_case_performance, calculate_task_performance
 
-from layouts.homepage import build_homepage_layout
+# =============================================================================
+# Page‐layout factories
+# =============================================================================
+from layouts.login           import build_login_layout
+from layouts.user_management import build_user_management_layout
+from layouts.homepage        import build_homepage_layout
+from layouts.templates       import build_templates_layout, build_template_tasks_container
+from layouts.calendar        import build_calendar_layout, build_calendar_tasks_table_component
+from layouts.dashboard       import build_dashboard_layout
+from layouts.reports         import build_date_report_layout
+from layouts.case_detail     import build_case_detail_layout
 
+# =============================================================================
+# Auth helpers
+# =============================================================================
+from auth import (
+    db_add_user, db_get_user, db_get_all_users,
+    db_update_user_password, db_delete_user, check_password
+)
 
+# =============================================================================
+# DB connection & query APIs used in callbacks
+# =============================================================================
 from db.connection import get_db_connection
 from db.queries import (
     db_fetch_all_cases,
@@ -42,125 +56,32 @@ from db.queries import (
     db_fetch_single_case,
     db_fetch_case_due_date,
     db_fetch_tasks_for_case,
-    db_update_case_dates_from_tasks,
-    db_calculate_and_set_task_due_dates,
+    db_fetch_attachments_for_task,
+    db_fetch_remarks_for_case,
     db_update_case_status_and_start_date,
-    db_check_and_complete_case,
     db_update_task_details,
+    db_add_remark,
     db_fetch_tasks_for_date,
     db_fetch_tasks_for_month,
     db_fetch_template_types,
     db_add_template_type,
     db_delete_template_type,
-    db_fetch_tasks_for_template,
     db_add_task_to_template,
-    db_update_task_template,
     db_delete_task_from_template,
-    db_add_remark,
-    db_fetch_remarks_for_case,
     db_fetch_affected_cases_report,
     db_fetch_affected_tasks_report,
     _fetch_dashboard_data
 )
 
-
-# Using Dash Mantine Components for a modern, reliable UI
-import dash_mantine_components as dmc
-
-# Import Plotly Express for charting
-import plotly.express as px
-import plotly.io as pio
-
-# Import user authentication and management functions
-from auth import (
-    db_add_user, db_get_user, db_get_all_users,
-    db_update_user_password, db_delete_user, check_password
-)
-
-# Database connection (moved out of auth into its own module)
-from db.connection import get_db_connection
-
-
-# Import Flask server for download handling
-from flask import send_from_directory
-
 # =============================================================================
-# DARK MODE THEME CONFIGURATION
+# Attachment helper functions
 # =============================================================================
-# 1. Define the custom dark theme for MantineProvider
-DARK_THEME = {
-    "colorScheme": "dark",
-    "primaryColor": "blue",
-    "colors": {
-        "dark": [
-            "#C1C2C5", "#A6A7AB", "#909296", "#5C5F66", "#373A40", "#2C2E33", "#25262B", "#1A1B1E", "#141517",
-            "#101113",
-        ],
-        "blue": [
-            "#E7F5FF", "#D0EBFF", "#A5D8FF", "#74C0FC", "#4DABF7", "#339AF0", "#228BE6", "#1C7ED6", "#1971C2",
-            "#1864AB",
-        ],
-        "red": [
-            "#FFF5F5", "#FFE3E3", "#FFC9C9", "#FFA8A8", "#FF8787", "#FF6B6B", "#FA5252", "#F03E3E", "#E03131",
-            "#C92A2A"
-        ],
-    },
-    "fontFamily": "'Inter', sans-serif",
-    "headings": {"fontFamily": "'Inter', sans-serif", "fontWeight": 600},
-}
-
-# 2. Set the default Plotly template for dark mode charts
-pio.templates["custom_dark"] = pio.templates["plotly_dark"]
-pio.templates["custom_dark"].layout.paper_bgcolor = 'rgba(0,0,0,0)'
-pio.templates["custom_dark"].layout.plot_bgcolor = 'rgba(0,0,0,0)'
-pio.templates["custom_dark"].layout.font.color = DARK_THEME["colors"]["dark"][0]
-pio.templates["custom_dark"].layout.title.font.color = DARK_THEME["colors"]["dark"][0]
-pio.templates.default = "custom_dark"
-
-# 3. Define DataTable styles for dark mode
-DATATABLE_STYLE_DARK = {
-    'style_table': {'overflowX': 'auto'},
-    'style_header': {
-        'backgroundColor': DARK_THEME["colors"]["dark"][6],
-        'color': 'white',
-        'fontWeight': 'bold',
-        'border': '1px solid ' + DARK_THEME["colors"]["dark"][4],
-    },
-    'style_cell': {
-        'backgroundColor': DARK_THEME["colors"]["dark"][7],
-        'color': 'white',
-        'border': '1px solid ' + DARK_THEME["colors"]["dark"][4],
-        'padding': '10px',
-        'textAlign': 'left'
-    },
-    'style_data_conditional': [
-        {'if': {'row_index': 'odd'}, 'backgroundColor': DARK_THEME["colors"]["dark"][6]},
-        {'if': {'state': 'active'}, 'backgroundColor': DARK_THEME["colors"]["blue"][8],
-         'border': '1px solid ' + DARK_THEME["colors"]["blue"][5]},
-        {'if': {'state': 'selected'}, 'backgroundColor': DARK_THEME["colors"]["blue"][9],
-         'border': '1px solid ' + DARK_THEME["colors"]["blue"][5]},
-        # Performance coloring
-        {'if': {'filter_query': '{performance} = "Completed On Time"'}, 'backgroundColor': '#1F4B2D',
-         'color': '#E6F4EA'},
-        {'if': {'filter_query': '{performance} = "On Time"'}, 'backgroundColor': '#1F4B2D', 'color': '#E6F4EA'},
-        {'if': {'filter_query': '{performance} = "Completed Late"'}, 'backgroundColor': '#663C00', 'color': '#FFECB3'},
-        {'if': {'filter_query': '{performance} = "Overdue"'}, 'backgroundColor': '#5C2223', 'color': '#FEEBEE'},
-        {'if': {'filter_query': '{performance} = "Pending"'}, 'backgroundColor': '#373A40', 'color': '#A6A7AB'},
-    ]
-}
-
-# =============================================================================
-# GLOBAL HELPER FUNCTIONS
-# =============================================================================
-# Directory to store uploaded files
 UPLOAD_DIRECTORY = "uploads"
 if not os.path.exists(UPLOAD_DIRECTORY):
     os.makedirs(UPLOAD_DIRECTORY)
 
-# =============================================================================
-# ATTACHMENT FUNCTIONS
-# =============================================================================
 def db_add_attachment(task_id: int, original_filename: str, stored_filename: str, uploaded_by: str):
+    from sqlalchemy import text
     sql = text("""
         INSERT INTO task_attachments (task_id, original_filename, stored_filename, uploaded_by)
         VALUES (:task_id, :original_filename, :stored_filename, :uploaded_by)
@@ -174,92 +95,24 @@ def db_add_attachment(task_id: int, original_filename: str, stored_filename: str
         })
         conn.commit()
 
-
-def db_fetch_attachments_for_task(task_id: int) -> pd.DataFrame:
-    sql = text("""
-        SELECT attachment_id, original_filename, stored_filename
-        FROM task_attachments WHERE task_id = :task_id ORDER BY upload_timestamp DESC
-    """)
-    with get_db_connection() as conn:
-        return pd.read_sql(sql, conn, params={"task_id": task_id})
-
-
-def db_get_attachment_info(attachment_id: int) -> Optional[Dict[str, Any]]:
+def db_get_attachment_info(attachment_id: int):
+    from sqlalchemy import text
     sql = text("SELECT stored_filename FROM task_attachments WHERE attachment_id = :attachment_id")
     with get_db_connection() as conn:
-        result = conn.execute(sql, {"attachment_id": attachment_id}).fetchone()
-        if result:
-            try:
-                return result._asdict()
-            except AttributeError:
-                return dict(result)
-        return None
-
+        row = conn.execute(sql, {"attachment_id": attachment_id}).fetchone()
+        return dict(row) if row else None
 
 def db_delete_attachment(attachment_id: int):
-    attachment_info = db_get_attachment_info(attachment_id)
-    if attachment_info:
-        file_path = os.path.join(UPLOAD_DIRECTORY, attachment_info['stored_filename'])
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
+    info = db_get_attachment_info(attachment_id)
+    if info:
+        path = os.path.join(UPLOAD_DIRECTORY, info["stored_filename"])
+        if os.path.exists(path):
+            os.remove(path)
+    from sqlalchemy import text
     sql = text("DELETE FROM task_attachments WHERE attachment_id = :attachment_id")
     with get_db_connection() as conn:
         conn.execute(sql, {"attachment_id": attachment_id})
         conn.commit()
-
-
-# =============================================================================
-# App Layout Building Functions
-# =============================================================================
-def build_cases_list_component(privilege: str):
-    cases_df = db_fetch_all_cases()
-    is_admin = (privilege == 'Admin')
-
-    header = dbc.ListGroupItem(
-        dbc.Row([
-            dbc.Col(html.B("Case Name"), width=4), dbc.Col(html.B("Status"), width=2),
-            dbc.Col(html.B("Performance"), width=2), dbc.Col(html.B("Case Type"), width=2),
-            dbc.Col(html.B("Action"), width=2),
-        ], align="center"),
-        className="list-group-item-dark"
-    )
-
-    def get_performance_color(p):
-        return {"Completed On Time": "green", "On Time": "green", "Overdue": "red",
-                "Pending": "gray", "Completed Late": "orange"}.get(p, "blue")
-
-    if cases_df.empty:
-        return dbc.ListGroup([header, dbc.ListGroupItem("No cases found.")], flush=True)
-
-    case_items = [header]
-    for _, row in cases_df.iterrows():
-        action_buttons = [
-            dmc.Button("View", id={'type': 'view-case-btn', 'index': row['case_id']}, size="xs", variant="subtle")
-        ]
-        if is_admin:
-            action_buttons.extend([
-                dmc.Button("Edit", id={'type': 'edit-case-btn', 'index': row['case_id']}, size="xs", color="yellow",
-                           variant="subtle", ml=5),
-                dmc.Button("Delete", id={'type': 'delete-case-btn', 'index': row['case_id']}, size="xs", color="red",
-                           variant="subtle", ml=5)
-            ])
-
-        item = dbc.ListGroupItem(
-            dbc.Row([
-                dbc.Col(row['case_name'], width=4, className="d-flex align-items-center"),
-                dbc.Col(row['status'], width=2, className="d-flex align-items-center"),
-                dbc.Col(
-                    dmc.Badge(row['performance'], color=get_performance_color(row['performance']), variant="light") if
-                    row['performance'] else "N/A",
-                    width=2, className="d-flex align-items-center"),
-                dbc.Col(row['case_type'], width=2, className="d-flex align-items-center"),
-                dbc.Col(dmc.Group(action_buttons, gap='xs'), width=2),
-            ], align="center", className="py-2")
-        )
-        case_items.append(item)
-
-    return dbc.ListGroup(case_items, flush=True)
 
 def build_attachments_list(task_id):
     attachments_df = db_fetch_attachments_for_task(task_id)
@@ -292,40 +145,26 @@ def build_attachments_list(task_id):
         items.append(item)
     return dbc.ListGroup(items, flush=True)
 
-
-def build_remarks_display_component(case_id: int):
-    remarks_df = db_fetch_remarks_for_case(case_id)
-    if remarks_df.empty: return html.P("No remarks yet.", className="text-muted")
-    return [
-        dbc.Card(
-            dbc.CardBody([
-                dmc.Text(f"By {row['user_name']} on {row['timestamp']}", size="xs", c="dimmed"),
-                dmc.Text(row['message'], c="dark.0")
-            ]),
-            className="mb-2",
-            style={"backgroundColor": DARK_THEME['colors']['dark'][6]}
-        ) for _, row in remarks_df.iterrows()
-    ]
-
-
-
 # =============================================================================
-# App Initialization and Main Layout
+# App initialization & layout
 # =============================================================================
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True
+)
 server = app.server
 
-
+# file serving endpoints
 @server.route('/files/view/<filename>')
-def serve_viewable_file(filename):
+def serve_view(filename):
     return send_from_directory(UPLOAD_DIRECTORY, filename)
 
-
 @server.route('/files/download/<filename>')
-def serve_downloadable_file(filename):
+def serve_download(filename):
     return send_from_directory(UPLOAD_DIRECTORY, filename, as_attachment=True)
 
-
+# main layout
 app.layout = dmc.MantineProvider(
     theme=DARK_THEME,
     withGlobalClasses=True,
@@ -337,7 +176,6 @@ app.layout = dmc.MantineProvider(
         html.Div(id='page-content', className="p-4")
     ]
 )
-
 
 # =============================================================================
 # Main Router and Navbar Callback
@@ -437,11 +275,15 @@ def add_user(n_clicks, username, password, privilege):
     return dbc.Alert(f"Username '{username}' may already exist.", color="danger"), dash.no_update
 
 
-@callback(Output('reset-password-modal', 'is_open'), Output('reset-user-id-store', 'data'),
-          Output('reset-password-username-text', 'children'),
-          Output('delete-user-modal', 'is_open'), Output('delete-user-id-store', 'data'),
-          Output('delete-user-confirm-text', 'children'),
-          Input('users-table', 'active_cell'), State('users-table', 'data'), prevent_initial_call=True)
+@callback(Output('reset-password-modal', 'is_open', allow_duplicate=True),
+          Output('reset-user-id-store', 'data', allow_duplicate=True),
+          Output('reset-password-username-text', 'children', allow_duplicate=True),
+          Output('delete-user-modal', 'is_open', allow_duplicate=True),
+          Output('delete-user-id-store', 'data', allow_duplicate=True),
+          Output('delete-user-confirm-text', 'children', allow_duplicate=True),
+          Input('users-table', 'active_cell'),
+          State('users-table', 'data'),
+          prevent_initial_call=True)
 def open_user_action_modals(active_cell, data):
     if not active_cell or active_cell.get('row') is None or active_cell.get(
             'column_id') != 'actions': raise dash.exceptions.PreventUpdate
@@ -451,7 +293,7 @@ def open_user_action_modals(active_cell, data):
 
 
 @callback(Output('user-management-alert', 'children'), Output('reset-password-modal', 'is_open', allow_duplicate=True),
-          Output('reset-password-input', 'value'),
+          Output('reset-password-input', 'value', allow_duplicate=True), # Added allow_duplicate=True here
           Input('reset-password-save-button', 'n_clicks'), State('reset-user-id-store', 'data'),
           State('reset-password-input', 'value'), prevent_initial_call=True)
 def handle_reset_password(n_clicks, user_id, new_password):
@@ -483,6 +325,8 @@ def home_add_case(n_clicks, session_data, name, status, case_type):
     db_populate_tasks_from_template(new_case_id, case_type)
 
     alert = dbc.Alert(f"Case '{name}' added successfully.", color="success", duration=3000)
+    # Assuming build_cases_list_component is defined elsewhere in your project
+    from layouts.homepage import build_cases_list_component # Added this import for context
     return build_cases_list_component(privilege), alert
 
 
@@ -541,6 +385,8 @@ def save_case_edit(n_clicks, session_data, case_id, name, status, case_type):
     db_update_case(case_id, name, status, case_type)
     privilege = (session_data or {}).get('privilege')
     alert = dbc.Alert(f"Case '{name}' updated successfully.", color="success", duration=3000)
+    # Assuming build_cases_list_component is defined elsewhere in your project
+    from layouts.homepage import build_cases_list_component # Added this import for context
     return build_cases_list_component(privilege), alert, False
 
 
@@ -559,6 +405,8 @@ def confirm_case_delete(n_clicks, session_data, case_id):
     db_delete_case(case_id)
     privilege = (session_data or {}).get('privilege')
     alert = dbc.Alert(f"Case has been deleted.", color="danger", duration=3000)
+    # Assuming build_cases_list_component is defined elsewhere in your project
+    from layouts.homepage import build_cases_list_component # Added this import for context
     return build_cases_list_component(privilege), alert, False
 
 
@@ -637,6 +485,8 @@ def update_case_status(n_clicks, case_id, new_status):
     db_update_case_status_and_start_date(case_id, new_status)
     updated_case_info = db_fetch_single_case(case_id)
     new_due_date = db_fetch_case_due_date(case_id)
+    # Assuming build_tasks_table_component is defined elsewhere in your project
+    from layouts.case_detail import build_tasks_table_component # Added this import for context
     return (dbc.Alert("Case status updated! Dates may have been recalculated.", color="info", duration=4000),
             build_tasks_table_component(case_id),
             f"Started: {updated_case_info['start_date'].strftime('%Y-%m-%d')}" if updated_case_info.get(
@@ -720,6 +570,8 @@ def handle_edit_task_modal_actions(save_clicks, session_data, task_id, case_id, 
         'completed_date') else ""
     new_due_text = f"Case Due: {case_due_date_obj.strftime('%Y-%m-%d')}" if case_due_date_obj else ""
 
+    # Assuming build_tasks_table_component is defined elsewhere in your project
+    from layouts.case_detail import build_tasks_table_component # Added this import for context
     return (False, dbc.Alert(alert_msg, color="success", duration=5000), build_tasks_table_component(case_id),
             updated_case_info.get('status'), new_complete_text, new_start_text, new_due_text)
 
@@ -739,6 +591,8 @@ def add_remark_to_case(n_clicks, case_id, user_name, message):
     if not message or not message.strip(): return dash.no_update, "", dbc.Alert("Remark message cannot be empty.",
                                                                                 color="warning", duration=3000)
     db_add_remark(case_id, user_name, message)
+    # Assuming build_remarks_display_component is defined elsewhere in your project
+    from layouts.case_detail import build_remarks_display_component # Added this import for context
     return build_remarks_display_component(case_id), "", dbc.Alert("Remark added.", color="success", duration=3000)
 
 
@@ -806,337 +660,215 @@ def add_template_type(n_clicks, session_data, type_name):
 
 @callback(Output('template-tasks-container', 'children'), Input('selected-template-type-id-store', 'data'),
           State('session-store', 'data'))
-def display_template_tasks(template_id, session_data):
-    if template_id is None: return html.P("Select a template type to see its tasks.")
-    return build_template_tasks_container(template_id, (session_data or {}).get('privilege'))
-
-
-@callback(
-    Output('template-tasks-container', 'children', allow_duplicate=True),
-    Output('templates-alert-container', 'children', allow_duplicate=True),
-    [Input('add-task-to-template-button', 'n_clicks'),
-     Input('template-tasks-table', 'active_cell')],
-    [State('session-store', 'data'),
-     State('selected-template-type-id-store', 'data'),
-     State('new-task-seq', 'value'),
-     State('new-task-name', 'value'),
-     State('new-task-status', 'value'),
-     State('new-task-offset', 'value'),
-     State('new-task-documents', 'value'),
-     State('template-tasks-table', 'data')],
-    prevent_initial_call=True
-)
-def handle_template_task_actions(add_clicks, active_cell, session_data, template_id, seq, name, status, offset,
-                                 documents, table_data):
+def display_template_tasks(template_id, session_data): # Added session_data as an argument here
     privilege = (session_data or {}).get('privilege')
-    if privilege != 'Admin':
-        return dash.no_update, dbc.Alert("You do not have permission to perform this action.", color="danger")
+    return build_template_tasks_container(template_id, privilege) # Assuming this function exists and takes privilege
 
-    triggered_id = ctx.triggered_id
-    alert = dash.no_update
-
-    if triggered_id == 'add-task-to-template-button':
-        if not all([template_id, seq, name, status]):
-            alert = dbc.Alert("Seq, Name, and Status are required.", color="warning")
-        else:
-            db_add_task_to_template(template_id, seq, name, status, offset, documents)
-            alert = dbc.Alert("Task added!", color="success", duration=3000)
-
-    elif triggered_id == 'template-tasks-table' and active_cell and active_cell['column_id'] == 'delete':
-        task_template_id = table_data[active_cell['row']]['task_template_id']
-        db_delete_task_from_template(task_template_id)
-        alert = dbc.Alert("Task removed!", color="success", duration=3000)
-    else:
-        raise dash.exceptions.PreventUpdate
-
-    return build_template_tasks_container(template_id, privilege), alert
-
-
-@callback(
-    Output('templates-alert-container', 'children', allow_duplicate=True),
-    Input('template-tasks-table', 'data'),
-    State('template-tasks-table', 'data_previous'),
-    prevent_initial_call=True
-)
-def handle_template_task_edit(data, data_previous):
-    if data is None or data_previous is None:
-        raise dash.exceptions.PreventUpdate
-
-    for i, row in enumerate(data):
-        if row != data_previous[i]:
-            changed_row = row
-            original_row = data_previous[i]
-
-            for col_id in changed_row:
-                if col_id in original_row and changed_row[col_id] != original_row[col_id]:
-                    task_template_id = changed_row['task_template_id']
-                    new_value = changed_row[col_id]
-
-                    db_update_task_template(task_template_id, col_id, new_value)
-
-                    return dbc.Alert(f"Updated '{col_id.replace('_', ' ').title()}' successfully.", color="info",
-                                     duration=2000)
-
-    raise dash.exceptions.PreventUpdate
-
-
-# UPDATED
 @callback(
     Output('selected-template-type-id-store', 'data'),
     Input({'type': 'template-type-item', 'index': ALL}, 'n_clicks'),
-    State({'type': 'delete-template-btn', 'index': ALL}, 'n_clicks'),
+    State({'type': 'template-type-item', 'index': ALL}, 'id'),
     prevent_initial_call=True
 )
-def update_selected_template_id_store(item_clicks, delete_clicks):
-    # This prevents the list item from being selected if the delete button inside it was the trigger
-    if ctx.triggered_id and 'delete-template-btn' in ctx.triggered_id.get('type', ''):
+def update_selected_template(n_clicks, ids):
+    if not ctx.triggered_id:
         raise dash.exceptions.PreventUpdate
 
-    if not any(item_clicks):
-        raise dash.exceptions.PreventUpdate
+    selected_template_id = ctx.triggered_id['index']
+    return selected_template_id
 
-    return ctx.triggered_id['index']
+# ===================== DASHBOARD CHART CALLBACK =====================
 
+from dash import callback, Output, Input, State
+import plotly.express as px
 
-# NEW
 @callback(
-    Output('delete-template-modal', 'is_open'),
-    Output('delete-template-id-store', 'data'),
-    Output('delete-template-confirm-text', 'children'),
-    Input({'type': 'delete-template-btn', 'index': ALL}, 'n_clicks'),
-    State('template-type-list', 'children'),
+    Output('case-status-pie-chart', 'figure'),
+    Output('case-performance-pie-chart', 'figure'),
+    Output('task-status-bar-chart', 'figure'),
+    Output('task-performance-bar-chart', 'figure'),
+    Output('case-performance-by-type-bar-chart', 'figure'),
+    Input('dashboard-generate-button', 'n_clicks'),
+    State('dashboard-from-date', 'value'),
+    State('dashboard-to-date', 'value'),
     prevent_initial_call=True
 )
-def open_delete_template_modal(n_clicks, template_list_children):
-    if not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
+def update_dashboard_charts(n_clicks, from_date, to_date):
+    import pandas as pd
+    empty_fig = px.scatter()  # fallback if no data
 
-    template_id_to_delete = ctx.triggered_id['index']
+    # Validate input
+    if not n_clicks or not from_date or not to_date:
+        return [empty_fig] * 5
 
-    # Find the name of the template to show in the confirmation message
-    template_name = "this template"
-    try:
-        for item in template_list_children:
-            if item['props']['id']['index'] == template_id_to_delete:
-                template_name = f"'{item['props']['children']['props']['children'][0]['props']['children']}'"
-                break
-    except (TypeError, KeyError):
-        pass  # Fallback to the generic name if parsing fails
+    # Use your dashboard data fetcher (returns cases_df, tasks_df)
+    cases_df, tasks_df = _fetch_dashboard_data(
+        pd.to_datetime(from_date).date(),
+        pd.to_datetime(to_date).date()
+    )
 
-    text = f"Are you sure you want to delete the template {template_name}? This will delete all of its checklist tasks and cannot be undone."
+    # 1. Case Status Pie
+    case_status_fig = (px.pie(cases_df, names='status', title='') if not cases_df.empty else empty_fig)
 
-    return True, template_id_to_delete, text
+    # 2. Case Performance Pie
+    case_perf_fig = (px.pie(cases_df, names='performance', title='') if not cases_df.empty else empty_fig)
 
+    # 3. Task Status Bar
+    task_status_fig = (px.histogram(tasks_df, x='status', title='') if not tasks_df.empty else empty_fig)
 
-# NEW
+    # 4. Task Performance Bar
+    task_perf_fig = (px.histogram(tasks_df, x='performance', title='') if not tasks_df.empty else empty_fig)
+
+    # 5. Case Performance by Type Bar
+    if not cases_df.empty and 'case_type' in cases_df and 'performance' in cases_df:
+        grouped = cases_df.groupby(['case_type', 'performance']).size().reset_index(name='count')
+        bytype_fig = px.bar(grouped, x='case_type', y='count', color='performance', barmode='group', title='')
+    else:
+        bytype_fig = empty_fig
+
+    return case_status_fig, case_perf_fig, task_status_fig, task_perf_fig, bytype_fig
+
+#Date Range Report Callback
+
+from dash import callback, Output, Input, State, dash_table, html
+import pandas as pd
+from utils.styles import DATATABLE_STYLE_DARK  # Use your dark style
+
 @callback(
-    Output('delete-template-modal', 'is_open', allow_duplicate=True),
-    Output('templates-alert-container', 'children', allow_duplicate=True),
-    Output('template-type-list', 'children', allow_duplicate=True),
-    Output('template-tasks-container', 'children', allow_duplicate=True),
-    Input('confirm-delete-template-button', 'n_clicks'),
-    State('delete-template-id-store', 'data'),
-    State('session-store', 'data'),
+    Output('report-output-container', 'children'),
+    Input('report-generate-button', 'n_clicks'),
+    State('report-type-dropdown', 'value'),
+    State('report-from-date', 'value'),
+    State('report-to-date', 'value'),
     prevent_initial_call=True
 )
-def confirm_template_delete(n_clicks, template_id, session_data):
-    if not n_clicks:
-        raise dash.exceptions.PreventUpdate
+def generate_date_range_report(n_clicks, report_type, from_date, to_date):
+    if not n_clicks or not report_type or not from_date or not to_date:
+        return html.Div("Please select report type and date range.", style={"color": "orange"})
 
-    db_delete_template_type(template_id)
+    from db.queries import db_fetch_affected_cases_report, db_fetch_affected_tasks_report
 
-    privilege = (session_data or {}).get('privilege', 'User')
+    from_date = pd.to_datetime(from_date).date()
+    to_date = pd.to_datetime(to_date).date()
 
-    # Rebuild the list of templates after deletion
-    template_types_df = db_fetch_template_types()
-    template_types = template_types_df.to_dict('records') if not template_types_df.empty else []
+    if report_type == "Cases":
+        df = db_fetch_affected_cases_report(from_date, to_date)
+    else:
+        df = db_fetch_affected_tasks_report(from_date, to_date)
 
-    def create_template_item(tt):
-        is_admin = (privilege == 'Admin')
-        if is_admin:
-            return dbc.ListGroupItem(
-                dbc.Row([
-                    dbc.Col(tt['type_name'], width=9, className="d-flex align-items-center"),
-                    dbc.Col(
-                        dmc.Button("Delete", id={'type': 'delete-template-btn', 'index': tt['template_type_id']},
-                                   color="red", variant="subtle", size="xs"), width=3,
-                        className="d-flex justify-content-end")
-                ], align="center"),
-                id={'type': 'template-type-item', 'index': tt['template_type_id']}, action=True
-            )
-        return dbc.ListGroupItem(tt['type_name'], id={'type': 'template-type-item', 'index': tt['template_type_id']},
-                                 action=True)
+    if df.empty:
+        return html.Div("No data found for this period.", style={"color": "orange"})
 
-    new_list_children = [create_template_item(tt) for tt in template_types]
+    # Add action column if available
+    if "case_id" in df.columns:
+        df["action"] = "View"
 
-    alert = dbc.Alert("Template and its tasks have been deleted.", color="danger", duration=3000)
-    # Also clear the right-hand panel showing the tasks of the now-deleted template
-    cleared_tasks_container = html.P("Select a template type to see its tasks.")
+    columns = [{"name": c.replace("_", " ").title(), "id": c} for c in df.columns]
 
-    return False, alert, new_list_children, cleared_tasks_container
+    # Make a local copy of the dark style, and add the underline for 'action'
+    datatable_style = DATATABLE_STYLE_DARK.copy()
+    datatable_style['style_cell_conditional'] = datatable_style.get('style_cell_conditional', []) + [
+        {"if": {"column_id": "action"}, "color": "#58a6ff", "textDecoration": "underline", "cursor": "pointer"},
+    ]
 
+    return dash_table.DataTable(
+        id='report-table',
+        columns=columns,
+        data=df.to_dict("records"),
+        page_size=20,
+        **datatable_style
+    )
+# ===================== ATTACHMENTS MODAL CALLBACKS (FULL SECTION) =====================
 
-# NEW
+from dash import callback, Output, Input, State, ctx, ALL, no_update
+import os
+import base64
+import uuid
+
+# Make sure this import path matches your project!
+from layouts.case_detail import build_attachments_list
+
+UPLOAD_DIRECTORY = "uploads"
+if not os.path.exists(UPLOAD_DIRECTORY):
+    os.makedirs(UPLOAD_DIRECTORY)
+
+# 1. Open the modal when Attachments cell is clicked
 @callback(
-    Output('delete-template-modal', 'is_open', allow_duplicate=True),
-    Input('cancel-delete-template-button', 'n_clicks'),
+    Output("attachment-modal", "is_open"),
+    Output("attachment-task-id-store", "data"),
+    Input("detail-tasks-table", "active_cell"),
+    State("detail-tasks-table", "data"),
+    prevent_initial_call=True,
+)
+def open_attachments_modal(active_cell, data):
+    if not active_cell or not data or active_cell.get('row') is None or active_cell.get('column_id') != 'attachments':
+        raise dash.exceptions.PreventUpdate
+    task_id = data[active_cell['row']]['task_id']
+    return True, task_id
+
+# 2. Close the modal when Close button is clicked
+@callback(
+    Output("attachment-modal", "is_open", allow_duplicate=True),
+    Input("close-attachment-modal", "n_clicks"),
     prevent_initial_call=True
 )
-def cancel_template_delete(n_clicks):
-    if not n_clicks:
-        raise dash.exceptions.PreventUpdate
-    return False
+def close_attachment_modal(n_clicks):
+    if n_clicks:
+        return False
+    raise dash.exceptions.PreventUpdate
 
-
-@callback(Output('report-output-container', 'children'), Input('report-generate-button', 'n_clicks'),
-          [State('report-type-dropdown', 'value'), State('report-from-date', 'value'),
-           State('report-to-date', 'value')], prevent_initial_call=True)
-def generate_date_range_report(n_clicks, report_type, from_date_str, to_date_str):
-    if not from_date_str or not to_date_str: return dbc.Alert("Please select a valid date range.", color="warning")
-    from_date_obj, to_date_obj = date.fromisoformat(from_date_str), date.fromisoformat(to_date_str)
-    if from_date_obj > to_date_obj: return dbc.Alert("'From Date' cannot be after 'To Date'.", color="danger")
-
-    df, cols = (db_fetch_affected_cases_report(from_date_obj, to_date_obj),
-                ['case_name', 'status', 'performance', 'case_type', 'start_date',
-                 'completed_date']) if report_type == 'Cases' \
-        else (db_fetch_affected_tasks_report(from_date_obj, to_date_obj),
-              ['case_name', 'task_name', 'status', 'performance', 'due_date'])
-
-    if df.empty: return dbc.Alert(f"No affected {report_type.lower()} found for the selected period.", color="info")
-
-    df['action'] = "View Case"
-    table_cols = [{"name": col.replace('_', ' ').title(), "id": col} for col in cols] + [
-        {"name": "Action", "id": "action"}]
-    return dash_table.DataTable(id='report-table', columns=table_cols, data=df.to_dict('records'),
-                                **DATATABLE_STYLE_DARK,
-                                style_cell_conditional=[
-                                    {'if': {'column_id': 'action'}, 'color': DARK_THEME["colors"]["blue"][5],
-                                     'textDecoration': 'underline', 'cursor': 'pointer'}], page_size=20)
-
-
-@callback(Output('case-status-pie-chart', 'figure'), Output('case-performance-pie-chart', 'figure'),
-          Output('task-status-bar-chart', 'figure'),
-          Output('task-performance-bar-chart', 'figure'), Output('case-performance-by-type-bar-chart', 'figure'),
-          Input('dashboard-generate-button', 'n_clicks'), State('dashboard-from-date', 'value'),
-          State('dashboard-to-date', 'value'), prevent_initial_call=True)
-def update_dashboard_charts(n_clicks, from_date_str, to_date_str):
-    if not from_date_str or not to_date_str: return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-    from_date_obj, to_date_obj = date.fromisoformat(from_date_str), date.fromisoformat(to_date_str)
-    cases_df, tasks_df = _fetch_dashboard_data(from_date_obj, to_date_obj)
-
-    empty_fig = {"layout": {"xaxis": {"visible": False}, "yaxis": {"visible": False}, "annotations": [
-        {"text": "No data for this period", "xref": "paper", "yref": "paper", "showarrow": False,
-         "font": {"size": 16}}]}}
-
-    case_status_fig = px.pie(cases_df, names='status', title='Case Status Distribution',
-                             hole=.3) if not cases_df.empty else empty_fig
-    case_perf_fig = px.pie(cases_df, names='performance', title='Overall Case Performance',
-                           hole=.3) if not cases_df.empty else empty_fig
-    task_status_fig = px.bar(tasks_df, x='status', title='Task Status by Period',
-                             color='status') if not tasks_df.empty else empty_fig
-    task_perf_fig = px.bar(tasks_df, x='performance', title='Task Performance by Period',
-                           color='performance') if not tasks_df.empty else empty_fig
-    case_perf_by_type_fig = px.bar(cases_df, x='case_type', color='performance', title='Case Performance by Case Type',
-                                   barmode='group') if not cases_df.empty else empty_fig
-
-    return case_status_fig, case_perf_fig, task_status_fig, task_perf_fig, case_perf_by_type_fig
-
-
-# =============================================================================
-# ATTACHMENT CALLBACKS
-# =============================================================================
+# 3. Handle BOTH:
+#    - Showing current attachments on open
+#    - Uploading files, then showing updated list
 @callback(
-    Output('attachment-modal', 'is_open'),
-    Output('attachment-task-id-store', 'data'),
-    Output('attachment-modal-title', 'children'),
-    Output('attachment-list-container', 'children'),
-    Input('detail-tasks-table', 'active_cell'),
-    Input('close-attachment-modal', 'n_clicks'),
-    State('detail-tasks-table', 'data'),
-    State('attachment-modal', 'is_open'),
-    prevent_initial_call=True
-)
-def handle_attachment_modal_visibility(active_cell, n_clicks, data, is_open):
-    triggered_id = ctx.triggered_id
-
-    if triggered_id == 'close-attachment-modal':
-        return False, dash.no_update, dash.no_update, dash.no_update
-
-    if active_cell and active_cell.get('column_id') == 'attachments':
-        task_data = data[active_cell['row']]
-        task_id = task_data['task_id']
-        task_name = task_data['task_name']
-
-        title = f"Attachments for: {task_name}"
-        attachment_list = build_attachments_list(task_id)
-
-        return True, task_id, title, attachment_list
-
-    return is_open, dash.no_update, dash.no_update, dash.no_update
-
-
-@callback(
-    Output('attachment-list-container', 'children', allow_duplicate=True),
-    Output('detail-tasks-table-container', 'children', allow_duplicate=True),
-    Output('detail-alert-container', 'children', allow_duplicate=True),
+    Output('existing-attachments-area', 'children', allow_duplicate=True),
+    Input('attachment-modal', 'is_open'),
     Input('upload-attachment', 'contents'),
     State('upload-attachment', 'filename'),
     State('attachment-task-id-store', 'data'),
-    State('detail-case-id-store', 'data'),
     State('session-store', 'data'),
     prevent_initial_call=True
 )
-def handle_file_upload(list_of_contents, list_of_names, task_id, case_id, session_data):
-    if list_of_contents is None:
-        raise dash.exceptions.PreventUpdate
+def update_attachments_area(modal_open, upload_contents, upload_filenames, task_id, session_data):
+    # 1. Handle file upload if triggered by upload
+    if ctx.triggered_id == 'upload-attachment' and upload_contents and upload_filenames:
+        if not isinstance(upload_filenames, list):
+            upload_contents = [upload_contents]
+            upload_filenames = [upload_filenames]
+        uploaded_by = (session_data or {}).get('username', 'System')
+        for content, filename in zip(upload_contents, upload_filenames):
+            content_type, content_string = content.split(',')
+            decoded = base64.b64decode(content_string)
+            ext = filename.split('.')[-1]
+            stored_filename = f"{uuid.uuid4().hex}.{ext}"
+            file_path = os.path.join(UPLOAD_DIRECTORY, stored_filename)
+            with open(file_path, "wb") as f:
+                f.write(decoded)
+            # Assumes db_add_attachment is in your app file or imported!
+            db_add_attachment(task_id, filename, stored_filename, uploaded_by)
 
-    username = (session_data or {}).get('username', 'System')
+    # 2. Always refresh list if modal open and task_id present
+    if modal_open and task_id:
+        return build_attachments_list(task_id)
+    return no_update
 
-    for content, name in zip(list_of_contents, list_of_names):
-        content_type, content_string = content.split(',')
-        decoded = base64.b64decode(content_string)
-
-        file_ext = os.path.splitext(name)[1]
-        stored_filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join(UPLOAD_DIRECTORY, stored_filename)
-
-        with open(file_path, "wb") as fp:
-            fp.write(decoded)
-
-        db_add_attachment(task_id, name, stored_filename, username)
-
-    new_attachment_list = build_attachments_list(task_id)
-    refreshed_table = build_tasks_table_component(case_id)
-    alert = dbc.Alert(f"{len(list_of_names)} file(s) uploaded successfully!", color="success", duration=3000)
-
-    return new_attachment_list, refreshed_table, alert
-
-
+# 4. Handle deleting an attachment, then refresh the list
 @callback(
-    Output('attachment-list-container', 'children', allow_duplicate=True),
-    Output('detail-tasks-table-container', 'children', allow_duplicate=True),
-    Output('detail-alert-container', 'children', allow_duplicate=True),
+    Output("existing-attachments-area", "children", allow_duplicate=True),
     Input({'type': 'delete-attachment-btn', 'index': ALL}, 'n_clicks'),
-    State('attachment-task-id-store', 'data'),
-    State('detail-case-id-store', 'data'),
-    prevent_initial_call=True
+    State("attachment-task-id-store", "data"),
+    prevent_initial_call=True,
 )
-def handle_file_delete(n_clicks, task_id, case_id):
-    if not any(n_clicks):
+def handle_delete_attachment(n_clicks_list, task_id):
+    if not any(n_clicks_list):
         raise dash.exceptions.PreventUpdate
-
-    attachment_id_to_delete = ctx.triggered_id['index']
-    db_delete_attachment(attachment_id_to_delete)
-
-    new_attachment_list = build_attachments_list(task_id)
-    refreshed_table = build_tasks_table_component(case_id)
-    alert = dbc.Alert("Attachment deleted.", color="danger", duration=3000)
-
-    return new_attachment_list, refreshed_table, alert
+    triggered = ctx.triggered_id
+    if triggered and isinstance(triggered, dict) and 'index' in triggered:
+        attachment_id = triggered['index']
+        db_delete_attachment(attachment_id)
+    return build_attachments_list(task_id)
 
 
-# =============================================================================
-# Main Execution
-# =============================================================================
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8050)
