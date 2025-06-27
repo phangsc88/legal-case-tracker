@@ -1,6 +1,12 @@
 import pandas as pd
 from sqlalchemy import text
 from .connection import get_db_connection
+from typing import Optional, Dict, Any, Tuple
+from datetime import date
+from utils.performance import calculate_case_performance as _calculate_case_performance
+from utils.performance import calculate_task_performance as _calculate_task_performance
+
+
 
 # Database Functions (WITH DYNAMIC LOGIC)
 # =============================================================================
@@ -441,6 +447,14 @@ def db_fetch_affected_tasks_report(from_date: date, to_date: date) -> pd.DataFra
                 axis=1)
         return df
 
+def db_fetch_attachments_for_task(task_id: int) -> pd.DataFrame:
+    sql = text("""
+        SELECT attachment_id, original_filename, stored_filename
+        FROM task_attachments WHERE task_id = :task_id ORDER BY upload_timestamp DESC
+    """)
+    with get_db_connection() as conn:
+        return pd.read_sql(sql, conn, params={"task_id": task_id})
+
 
 def _fetch_dashboard_data(from_date: date, to_date: date) -> Tuple[pd.DataFrame, pd.DataFrame]:
     with get_db_connection() as conn:
@@ -467,3 +481,4 @@ def _fetch_dashboard_data(from_date: date, to_date: date) -> Tuple[pd.DataFrame,
                 axis=1)
 
     return cases_df, tasks_df
+

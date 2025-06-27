@@ -1,10 +1,65 @@
-from dash import dash_table
+from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 
-from db.queries import db_fetch_tasks_for_case, db_fetch_attachments_for_task
-from utils.performance import calculate_task_performance
-from app32 import DATATABLE_STYLE_DARK
+# bring in all four DB functions you actually use here
+from db.queries import (
+    db_fetch_single_case,
+    db_fetch_case_due_date,
+    db_fetch_tasks_for_case,
+    db_fetch_attachments_for_task,
+    db_fetch_remarks_for_case,
+)
+def build_attachments_list(task_id):
+    attachments_df = db_fetch_attachments_for_task(task_id)
+    if attachments_df.empty:
+        return dbc.Alert("No attachments for this task.", color="info")
+
+    items = []
+    for _, row in attachments_df.iterrows():
+        item = dbc.ListGroupItem(
+            dbc.Row([
+                dbc.Col(row['original_filename'], width=7, className="d-flex align-items-center"),
+                dbc.Col(
+                    dmc.Group([
+                        dmc.Anchor(
+                            dmc.Button("View", variant="subtle", size="sm"),
+                            href=f"/files/view/{row['stored_filename']}",
+                            target="_blank"
+                        ),
+                        dmc.Anchor(
+                            dmc.Button("Download", variant="subtle", size="sm"),
+                            href=f"/files/download/{row['stored_filename']}",
+                            target="_blank"
+                        ),
+                        dmc.Button("Delete", id={'type': 'delete-attachment-btn', 'index': row['attachment_id']},
+                                   color="red", variant="subtle", size="sm"),
+                    ], gap="xs"),
+                    width=5, className="d-flex justify-content-end")
+            ], align="center")
+        )
+        items.append(item)
+    return dbc.ListGroup(items, flush=True)
+# performance calc isn’t used in this file; you can remove it if unused
+# from utils.performance import calculate_task_performance
+
+# your shared theme & styles
+from utils.styles import DARK_THEME, DATATABLE_STYLE_DARK
+
+def build_remarks_display_component(case_id: int):
+    remarks_df = db_fetch_remarks_for_case(case_id)
+    if remarks_df.empty: return html.P("No remarks yet.", className="text-muted")
+    return [
+        dbc.Card(
+            dbc.CardBody([
+                dmc.Text(f"By {row['user_name']} on {row['timestamp']}", size="xs", c="dimmed"),
+                dmc.Text(row['message'], c="dark.0")
+            ]),
+            className="mb-2",
+            style={"backgroundColor": DARK_THEME['colors']['dark'][6]}
+        ) for _, row in remarks_df.iterrows()
+    ]
+
 
 
 def build_case_detail_layout(case_id: int, username: str, privilege: str):
@@ -97,7 +152,7 @@ def build_case_detail_layout(case_id: int, username: str, privilege: str):
                 ])),
                 html.Hr(),
                 html.H5("Existing Attachments"),
-                html.Div(id='attachment-list-container')
+                html.Div(id='existing-attachments-area')
             ]),
             dbc.ModalFooter(
                 dmc.Button("Close", id="close-attachment-modal", variant="outline")
