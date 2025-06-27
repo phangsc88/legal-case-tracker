@@ -1,0 +1,173 @@
+/* style.css (Final Consolidated Version - Sleek Dark Grey Theme) */
+
+/* 1. Global Styles */
+body {
+    background-color: #1A1B1E; /* A very dark base background for contrast */
+    color: #E0E0E0;            /* A light grey for default text */
+    font-family: 'Inter', sans-serif;
+}
+
+/* 2. Heading Styles */
+h1, h2, h3, h4, h5, h6 {
+    color: #F8F9FA; /* A bright white for titles */
+}
+
+/* 3. General Text Labels (Fixes "From Date", "To Date", etc.) */
+.mantine-Text-root {
+    color: #DEE2E6;
+}
+
+/* 4. Main Component Styles (Navbar, Cards) */
+.navbar,
+.card {
+    background-color: #2C2E33 !important; /* A lighter, more noticeable dark grey */
+    border: 1px solid #495057 !important; /* A subtle border to match */
+}
+
+.card:hover {
+    box-shadow: 0 0 15px rgba(77, 171, 247, 0.2);
+}
+
+.card-title, .text-muted {
+    color: #E0E0E0 !important;
+}
+
+/* 5. List Group Styles (Templates Page) */
+.list-group-item {
+    background-color: #373A40;
+    border-color: #495057;
+    color: #E0E0E0;
+}
+
+.list-group-item-action:hover, .list-group-item.active {
+    background-color: #495057;
+    color: #FFFFFF;
+    border-color: #4DABF7;
+}
+
+/* 6. Input and Alert Styles */
+.input-group, .input-group .form-control {
+    background-color: #373A40 !important;
+    color: #E0E0E0 !important;
+    border-color: #495057 !important;
+}
+
+.alert-info {
+    background-color: #1971C2;
+    color: #FFFFFF;
+    border-color: #1864AB;
+}
+.alert-warning {
+    background-color: #E8590C;
+    color: #FFFFFF;
+    border-color: #D9480F;
+}
+
+/* 7. Plotly Chart Background */
+.js-plotly-plot .plotly .main-svg {
+    background: rgba(0,0,0,0) !important;
+}
+
+/* 8. DatePicker Readability (Consolidated) */
+.mantine-DatePicker-calendarHeaderLevel {
+    color: #FFFFFF !important; /* Pure white for max contrast */
+    font-weight: bold;
+}
+
+.mantine-DatePicker-calendarHeaderControl {
+    color: #DEE2E6 !important; /* Makes arrows visible */
+}
+.mantine-DatePicker-calendarHeaderControl:hover {
+    background-color: #495057 !important;
+}
+
+.mantine-DatePicker-weekday {
+    color: #A6A7AB !important;
+    font-weight: bold;
+}
+
+.mantine-DatePicker-day {
+    color: #DEE2E6 !important;
+}
+
+/* This is the definitive fix for the weekend color */
+.mantine-DatePicker-day.mantine-DatePicker-weekend {
+    color: #FAB005 !important; 
+}
+
+.mantine-DatePicker-day[data-selected="true"] {
+    color: #FFFFFF !important;
+}
+
+.mantine-DatePicker-day[data-today="true"] {
+    border: 1px solid #4DABF7;
+    border-radius: 4px;
+}
+
+.mantine-DatePicker-day[data-outside] {
+    color: #5C5F66 !important;
+}
+
+/* 9. Styles for Pop-up Components (like calendars in modals) */
+.mantine-Popover-dropdown {
+    background-color: #2C2E33 !important;
+    border: 1px solid #495057 !important;
+}
+
+/* ADD THIS NEW SECTION AT THE END OF THE FILE */
+
+/* 10. Force Dark Theme for dmc.Modal */
+
+/* Target the main modal panel and its header */
+.dmc-Modal-modal,
+.dmc-Modal-header {
+    background-color:red !important; 
+}
+
+/* Add a separator line below the header */
+.dmc-Modal-header {
+    border-bottom: 1px solid #495057;
+}
+
+/* Style the modal title text */
+.dmc-Modal-title {
+    color: #F8F9FA !important; /* Bright white title */
+    font-weight: bold;
+}
+
+/* Style the 'X' close button */
+.dmc-Modal-close {
+    color: #A6A7AB !important;
+}
+.dmc-Modal-close:hover {
+    background-color: #495057 !important;
+}
+
+/* This is the key fix: Force all text inside the modal body to be light */
+.dmc-Modal-body .mantine-Text-root {
+    color: #DEE2E6 !important;
+}
+
+/* Ensure the input fields inside the modal have the correct dark theme styles */
+.dmc-Modal-body .mantine-Input-input,
+.dmc-Modal-body .mantine-Select-input {
+    background-color: #373A40 !important;
+    color: #DEE2E6 !important;
+    border-color: #495057 !important;
+}
+
+/* ADD THIS NEW SECTION AT THE END OF THE FILE */
+
+/* 11. Style the dcc.Upload component */
+.uploader-area {
+    background-color: #373A40; /* Use our medium grey input background */
+    color: #A6A7AB;            /* A lighter grey for the prompt text */
+    border-color: #495057 !important; 
+}
+
+/* Style the "Select Files" link inside the uploader to make it stand out */
+.uploader-area a {
+    color: #4DABF7; /* Use our theme's primary blue color */
+    text-decoration: underline;
+    font-weight: bold;
+}

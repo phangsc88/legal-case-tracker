@@ -1,0 +1,479 @@
+# AUTO GENERATED FILE - DO NOT EDIT
+
+import typing  # noqa: F401
+from typing_extensions import TypedDict, NotRequired, Literal # noqa: F401
+from dash.development.base_component import Component, _explicitize_args
+
+ComponentType = typing.Union[
+    str,
+    int,
+    float,
+    Component,
+    None,
+    typing.Sequence[typing.Union[str, int, float, Component, None]],
+]
+
+NumberType = typing.Union[
+    typing.SupportsFloat, typing.SupportsInt, typing.SupportsComplex
+]
+
+
+class AppShell(Component):
+    """An AppShell component.
+AppShell
+
+Keyword arguments:
+
+- children (a list of or a singular dash component, string or number; required):
+    Content.
+
+- id (string; optional):
+    Unique ID to identify this component in Dash callbacks.
+
+- aria-* (string; optional):
+    Wild card aria attributes.
+
+- aside (dict; optional):
+    AppShell.Aside configuration, controls width, breakpoints and
+    collapsed state. Required if you use AppShell.Aside component.
+
+    `aside` is a dict with keys:
+
+    - width (number; required)
+
+    - breakpoint (number; required)
+
+    - collapsed (dict; optional)
+
+        `collapsed` is a dict with keys:
+
+        - desktop (boolean; optional)
+
+        - mobile (boolean; optional)
+
+- bd (string | number; optional):
+    Border.
+
+- bg (optional):
+    Background, theme key: theme.colors.
+
+- bga (optional):
+    BackgroundAttachment.
+
+- bgp (string | number; optional):
+    BackgroundPosition.
+
+- bgr (optional):
+    BackgroundRepeat.
+
+- bgsz (string | number; optional):
+    BackgroundSize.
+
+- bottom (string | number; optional)
+
+- c (optional):
+    Color.
+
+- className (string; optional):
+    Class added to the root element, if applicable.
+
+- classNames (dict; optional):
+    Adds class names to Mantine components.
+
+- darkHidden (boolean; optional):
+    Determines whether component should be hidden in dark color scheme
+    with `display: none`.
+
+- data-* (string; optional):
+    Wild card data attributes.
+
+- disabled (boolean; optional):
+    If set, Navbar, Aside, Header and Footer components be hidden.
+
+- display (optional)
+
+- ff (optional):
+    FontFamily.
+
+- flex (string | number; optional)
+
+- footer (dict; optional):
+    AppShell.Footer configuration, controls height, offset and
+    collapsed state. Required if you use AppShell.Footer component.
+
+    `footer` is a dict with keys:
+
+    - height (number; required)
+
+    - collapsed (boolean; optional)
+
+    - offset (boolean; optional)
+
+- fs (optional):
+    FontStyle.
+
+- fw (optional):
+    FontWeight.
+
+- fz (number; optional):
+    FontSize, theme key: theme.fontSizes.
+
+- h (string | number; optional):
+    Height, theme key: theme.spacing.
+
+- header (dict; optional):
+    AppShell.Header configuration, controls height, offset and
+    collapsed state. Required if you use AppShell.Header component.
+
+    `header` is a dict with keys:
+
+    - height (number; required)
+
+    - collapsed (boolean; optional)
+
+    - offset (boolean; optional)
+
+- hiddenFrom (optional):
+    Breakpoint above which the component is hidden with `display:
+    none`.
+
+- inset (string | number; optional)
+
+- layout (a value equal to: 'default', 'alt'; optional):
+    Determines how Navbar/Aside are arranged relative to
+    Header/Footer, `default` by default.
+
+- left (string | number; optional)
+
+- lh (number; optional):
+    LineHeight, theme key: lineHeights.
+
+- lightHidden (boolean; optional):
+    Determines whether component should be hidden in light color
+    scheme with `display: none`.
+
+- loading_state (dict; optional):
+    Object that holds the loading state object coming from
+    dash-renderer. For use with dash<3.
+
+    `loading_state` is a dict with keys:
+
+    - is_loading (boolean; required):
+        Determines if the component is loading or not.
+
+    - prop_name (string; required):
+        Holds which property is loading.
+
+    - component_name (string; required):
+        Holds the name of the component that is loading.
+
+- lts (string | number; optional):
+    LetterSpacing.
+
+- m (number; optional):
+    Margin, theme key: theme.spacing.
+
+- mah (string | number; optional):
+    MaxHeight, theme key: theme.spacing.
+
+- maw (string | number; optional):
+    MaxWidth, theme key: theme.spacing.
+
+- mb (number; optional):
+    MarginBottom, theme key: theme.spacing.
+
+- me (number; optional):
+    MarginInlineEnd, theme key: theme.spacing.
+
+- mih (string | number; optional):
+    MinHeight, theme key: theme.spacing.
+
+- miw (string | number; optional):
+    MinWidth, theme key: theme.spacing.
+
+- ml (number; optional):
+    MarginLeft, theme key: theme.spacing.
+
+- mod (string; optional):
+    Element modifiers transformed into `data-` attributes, for
+    example, `{ 'data-size': 'xl' }`, falsy values are removed.
+
+- mr (number; optional):
+    MarginRight, theme key: theme.spacing.
+
+- ms (number; optional):
+    MarginInlineStart, theme key: theme.spacing.
+
+- mt (number; optional):
+    MarginTop, theme key: theme.spacing.
+
+- mx (number; optional):
+    MarginInline, theme key: theme.spacing.
+
+- my (number; optional):
+    MarginBlock, theme key: theme.spacing.
+
+- navbar (dict; optional):
+    AppShell.Navbar configuration, controls width, breakpoints and
+    collapsed state. Required if you use AppShell.Navbar component.
+
+    `navbar` is a dict with keys:
+
+    - width (number; required)
+
+    - breakpoint (number; required)
+
+    - collapsed (dict; optional)
+
+        `collapsed` is a dict with keys:
+
+        - desktop (boolean; optional)
+
+        - mobile (boolean; optional)
+
+- offsetScrollbars (boolean; optional):
+    Determines whether Header and Footer components should include
+    styles to offset scrollbars. Based on `react-remove-scroll`.
+    `True` by default.
+
+- opacity (optional)
+
+- p (number; optional):
+    Padding, theme key: theme.spacing.
+
+- padding (number; optional):
+    Controls padding of the main section, `0` by default. !important!:
+    use `padding` prop instead of `p`.
+
+- pb (number; optional):
+    PaddingBottom, theme key: theme.spacing.
+
+- pe (number; optional):
+    PaddingInlineEnd, theme key: theme.spacing.
+
+- pl (number; optional):
+    PaddingLeft, theme key: theme.spacing.
+
+- pos (optional):
+    Position.
+
+- pr (number; optional):
+    PaddingRight, theme key: theme.spacing.
+
+- ps (number; optional):
+    PaddingInlineStart, theme key: theme.spacing.
+
+- pt (number; optional):
+    PaddingTop, theme key: theme.spacing.
+
+- px (number; optional):
+    PaddingInline, theme key: theme.spacing.
+
+- py (number; optional):
+    PaddingBlock, theme key: theme.spacing.
+
+- right (string | number; optional)
+
+- styles (boolean | number | string | dict | list; optional):
+    Mantine styles API.
+
+- ta (optional):
+    TextAlign.
+
+- tabIndex (number; optional):
+    tab-index.
+
+- td (string | number; optional):
+    TextDecoration.
+
+- top (string | number; optional)
+
+- transitionDuration (number; optional):
+    Duration of all transitions in ms, `200` by default.
+
+- transitionTimingFunction (optional):
+    Timing function of all transitions, `ease` by default.
+
+- tt (optional):
+    TextTransform.
+
+- unstyled (boolean; optional):
+    Remove all Mantine styling from the component.
+
+- variant (string; optional):
+    variant.
+
+- visibleFrom (optional):
+    Breakpoint below which the component is hidden with `display:
+    none`.
+
+- w (string | number; optional):
+    Width, theme key: theme.spacing.
+
+- withBorder (boolean; optional):
+    Determines whether associated components should have a border,
+    `True` by default.
+
+- zIndex (string | number; optional):
+    `z-index` of all associated elements, `200` by default."""
+    _children_props = []
+    _base_nodes = ['children']
+    _namespace = 'dash_mantine_components'
+    _type = 'AppShell'
+    NavbarCollapsed = TypedDict(
+        "NavbarCollapsed",
+            {
+            "desktop": NotRequired[bool],
+            "mobile": NotRequired[bool]
+        }
+    )
+
+    Navbar = TypedDict(
+        "Navbar",
+            {
+            "width": typing.Union[NumberType],
+            "breakpoint": typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]],
+            "collapsed": NotRequired["NavbarCollapsed"]
+        }
+    )
+
+    AsideCollapsed = TypedDict(
+        "AsideCollapsed",
+            {
+            "desktop": NotRequired[bool],
+            "mobile": NotRequired[bool]
+        }
+    )
+
+    Aside = TypedDict(
+        "Aside",
+            {
+            "width": typing.Union[NumberType],
+            "breakpoint": typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]],
+            "collapsed": NotRequired["AsideCollapsed"]
+        }
+    )
+
+    Header = TypedDict(
+        "Header",
+            {
+            "height": typing.Union[NumberType],
+            "collapsed": NotRequired[bool],
+            "offset": NotRequired[bool]
+        }
+    )
+
+    Footer = TypedDict(
+        "Footer",
+            {
+            "height": typing.Union[NumberType],
+            "collapsed": NotRequired[bool],
+            "offset": NotRequired[bool]
+        }
+    )
+
+    LoadingState = TypedDict(
+        "LoadingState",
+            {
+            "is_loading": bool,
+            "prop_name": str,
+            "component_name": str
+        }
+    )
+
+
+    def __init__(
+        self,
+        children: typing.Optional[ComponentType] = None,
+        withBorder: typing.Optional[bool] = None,
+        padding: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        navbar: typing.Optional["Navbar"] = None,
+        aside: typing.Optional["Aside"] = None,
+        header: typing.Optional["Header"] = None,
+        footer: typing.Optional["Footer"] = None,
+        transitionDuration: typing.Optional[NumberType] = None,
+        transitionTimingFunction: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["ease"], Literal["ease-in"], Literal["ease-in-out"], Literal["ease-out"], Literal["step-end"], Literal["step-start"], Literal["linear"]]] = None,
+        zIndex: typing.Optional[typing.Union[str, NumberType]] = None,
+        layout: typing.Optional[Literal["default", "alt"]] = None,
+        disabled: typing.Optional[bool] = None,
+        offsetScrollbars: typing.Optional[bool] = None,
+        className: typing.Optional[str] = None,
+        style: typing.Optional[typing.Any] = None,
+        hiddenFrom: typing.Optional[typing.Union[Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        visibleFrom: typing.Optional[typing.Union[Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        lightHidden: typing.Optional[bool] = None,
+        darkHidden: typing.Optional[bool] = None,
+        mod: typing.Optional[typing.Union[str]] = None,
+        m: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        my: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        mx: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        mt: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        mb: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        ms: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        me: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        ml: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        mr: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        p: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        py: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        px: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        pt: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        pb: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        ps: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        pe: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        pl: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        pr: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"]]] = None,
+        bd: typing.Optional[typing.Union[str, NumberType]] = None,
+        bg: typing.Optional[typing.Union[Literal["blue"], Literal["cyan"], Literal["gray"], Literal["green"], Literal["indigo"], Literal["lime"], Literal["orange"], Literal["pink"], Literal["red"], Literal["teal"], Literal["violet"], Literal["yellow"], Literal["dark"], Literal["grape"]]] = None,
+        c: typing.Optional[typing.Union[Literal["blue"], Literal["cyan"], Literal["gray"], Literal["green"], Literal["indigo"], Literal["lime"], Literal["orange"], Literal["pink"], Literal["red"], Literal["teal"], Literal["violet"], Literal["yellow"], Literal["dark"], Literal["grape"]]] = None,
+        opacity: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"]]] = None,
+        ff: typing.Optional[typing.Union[Literal["monospace"], Literal["text"], Literal["heading"]]] = None,
+        fz: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"], Literal["h1"], Literal["h2"], Literal["h3"], Literal["h4"], Literal["h5"], Literal["h6"]]] = None,
+        fw: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["bold"], Literal["normal"], Literal["bolder"], Literal["lighter"]]] = None,
+        lts: typing.Optional[typing.Union[str, NumberType]] = None,
+        ta: typing.Optional[typing.Union[Literal["left"], Literal["right"], Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["-webkit-match-parent"], Literal["center"], Literal["end"], Literal["justify"], Literal["match-parent"], Literal["start"]]] = None,
+        lh: typing.Optional[typing.Union[NumberType, Literal["xs"], Literal["sm"], Literal["md"], Literal["lg"], Literal["xl"], Literal["h1"], Literal["h2"], Literal["h3"], Literal["h4"], Literal["h5"], Literal["h6"]]] = None,
+        fs: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["normal"], Literal["italic"], Literal["oblique"]]] = None,
+        tt: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["none"], Literal["capitalize"], Literal["full-size-kana"], Literal["full-width"], Literal["lowercase"], Literal["uppercase"]]] = None,
+        td: typing.Optional[typing.Union[str, NumberType]] = None,
+        w: typing.Optional[typing.Union[str, NumberType]] = None,
+        miw: typing.Optional[typing.Union[str, NumberType]] = None,
+        maw: typing.Optional[typing.Union[str, NumberType]] = None,
+        h: typing.Optional[typing.Union[str, NumberType]] = None,
+        mih: typing.Optional[typing.Union[str, NumberType]] = None,
+        mah: typing.Optional[typing.Union[str, NumberType]] = None,
+        bgsz: typing.Optional[typing.Union[str, NumberType]] = None,
+        bgp: typing.Optional[typing.Union[str, NumberType]] = None,
+        bgr: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["no-repeat"], Literal["repeat"], Literal["repeat-x"], Literal["repeat-y"], Literal["round"], Literal["space"]]] = None,
+        bga: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["fixed"], Literal["local"], Literal["scroll"]]] = None,
+        pos: typing.Optional[typing.Union[Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["fixed"], Literal["-webkit-sticky"], Literal["absolute"], Literal["relative"], Literal["static"], Literal["sticky"]]] = None,
+        top: typing.Optional[typing.Union[str, NumberType]] = None,
+        left: typing.Optional[typing.Union[str, NumberType]] = None,
+        bottom: typing.Optional[typing.Union[str, NumberType]] = None,
+        right: typing.Optional[typing.Union[str, NumberType]] = None,
+        inset: typing.Optional[typing.Union[str, NumberType]] = None,
+        display: typing.Optional[typing.Union[Literal["flex"], Literal["-moz-initial"], Literal["inherit"], Literal["initial"], Literal["revert"], Literal["revert-layer"], Literal["unset"], Literal["none"], Literal["block"], Literal["inline"], Literal["run-in"], Literal["-ms-flexbox"], Literal["-ms-grid"], Literal["-webkit-flex"], Literal["flow"], Literal["flow-root"], Literal["grid"], Literal["ruby"], Literal["table"], Literal["ruby-base"], Literal["ruby-base-container"], Literal["ruby-text"], Literal["ruby-text-container"], Literal["table-caption"], Literal["table-cell"], Literal["table-column"], Literal["table-column-group"], Literal["table-footer-group"], Literal["table-header-group"], Literal["table-row"], Literal["table-row-group"], Literal["-ms-inline-flexbox"], Literal["-ms-inline-grid"], Literal["-webkit-inline-flex"], Literal["inline-block"], Literal["inline-flex"], Literal["inline-grid"], Literal["inline-list-item"], Literal["inline-table"], Literal["contents"], Literal["list-item"]]] = None,
+        flex: typing.Optional[typing.Union[str, NumberType]] = None,
+        classNames: typing.Optional[dict] = None,
+        styles: typing.Optional[typing.Any] = None,
+        unstyled: typing.Optional[bool] = None,
+        variant: typing.Optional[str] = None,
+        id: typing.Optional[typing.Union[str, dict]] = None,
+        tabIndex: typing.Optional[NumberType] = None,
+        loading_state: typing.Optional["LoadingState"] = None,
+        **kwargs
+    ):
+        self._prop_names = ['children', 'id', 'aria-*', 'aside', 'bd', 'bg', 'bga', 'bgp', 'bgr', 'bgsz', 'bottom', 'c', 'className', 'classNames', 'darkHidden', 'data-*', 'disabled', 'display', 'ff', 'flex', 'footer', 'fs', 'fw', 'fz', 'h', 'header', 'hiddenFrom', 'inset', 'layout', 'left', 'lh', 'lightHidden', 'loading_state', 'lts', 'm', 'mah', 'maw', 'mb', 'me', 'mih', 'miw', 'ml', 'mod', 'mr', 'ms', 'mt', 'mx', 'my', 'navbar', 'offsetScrollbars', 'opacity', 'p', 'padding', 'pb', 'pe', 'pl', 'pos', 'pr', 'ps', 'pt', 'px', 'py', 'right', 'style', 'styles', 'ta', 'tabIndex', 'td', 'top', 'transitionDuration', 'transitionTimingFunction', 'tt', 'unstyled', 'variant', 'visibleFrom', 'w', 'withBorder', 'zIndex']
+        self._valid_wildcard_attributes =            ['data-', 'aria-']
+        self.available_properties = ['children', 'id', 'aria-*', 'aside', 'bd', 'bg', 'bga', 'bgp', 'bgr', 'bgsz', 'bottom', 'c', 'className', 'classNames', 'darkHidden', 'data-*', 'disabled', 'display', 'ff', 'flex', 'footer', 'fs', 'fw', 'fz', 'h', 'header', 'hiddenFrom', 'inset', 'layout', 'left', 'lh', 'lightHidden', 'loading_state', 'lts', 'm', 'mah', 'maw', 'mb', 'me', 'mih', 'miw', 'ml', 'mod', 'mr', 'ms', 'mt', 'mx', 'my', 'navbar', 'offsetScrollbars', 'opacity', 'p', 'padding', 'pb', 'pe', 'pl', 'pos', 'pr', 'ps', 'pt', 'px', 'py', 'right', 'style', 'styles', 'ta', 'tabIndex', 'td', 'top', 'transitionDuration', 'transitionTimingFunction', 'tt', 'unstyled', 'variant', 'visibleFrom', 'w', 'withBorder', 'zIndex']
+        self.available_wildcard_properties =            ['data-', 'aria-']
+        _explicit_args = kwargs.pop('_explicit_args')
+        _locals = locals()
+        _locals.update(kwargs)  # For wildcard attrs and excess named props
+        args = {k: _locals[k] for k in _explicit_args if k != 'children'}
+
+        if 'children' not in _explicit_args:
+            raise TypeError('Required argument children was not specified.')
+
+        super(AppShell, self).__init__(children=children, **args)
+
+setattr(AppShell, "__init__", _explicitize_args(AppShell.__init__))
