@@ -3,21 +3,8 @@ import psycopg2
 from sqlalchemy import create_engine, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from typing import Dict, Any, Optional, List
+from db.connection import get_db_connection
 
-# IMPORTANT: For deployment, replace these with environment variables!
-DB_SETTINGS = {"dbname": "legal_tracker", "user": "legal_app_user", "password": "1234", "host": "localhost", "port": "5432"}
-
-def get_db_connection():
-    """
-    Establishes a connection to the PostgreSQL database using SQLAlchemy.
-    """
-    try:
-        db_url = f"postgresql+psycopg2://{DB_SETTINGS['user']}:{DB_SETTINGS['password']}@{DB_SETTINGS['host']}:{DB_SETTINGS['port']}/{DB_SETTINGS['dbname']}"
-        engine = create_engine(db_url)
-        return engine.connect()
-    except Exception as e:
-        print(f"DB Connection Error: {e}")
-        return None
 
 def hash_password(password: str) -> str:
     """Generates a secure hash for a password."""
