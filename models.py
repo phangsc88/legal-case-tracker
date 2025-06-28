@@ -22,8 +22,11 @@ class Case(Base):
     __tablename__ = "cases"
     case_id = Column(Integer, primary_key=True, autoincrement=True)
     case_name = Column(String(256), nullable=False)  # <-- change here!
+    case_type = Column(String(128), nullable=False)
     description = Column(Text)
     status = Column(String(32), nullable=False, default='Not Started')
+    start_date = Column(DateTime, nullable=True)
+    completed_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -35,14 +38,14 @@ class Task(Base):
     __tablename__ = "tasks"
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     case_id = Column(Integer, ForeignKey('cases.case_id'), nullable=False)
-    title = Column(String(256), nullable=False)
+    task_name = Column(String(256), nullable=False)  # <- use task_name for consistency
     description = Column(Text)
     status = Column(String(32), nullable=False, default='Not Started')
     due_date = Column(DateTime)
-    completed_at = Column(DateTime)
+    task_start_date = Column(DateTime)
+    task_completed_date = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
     case = relationship('Case')
 
 # --- Example: Add more tables as needed ---
