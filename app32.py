@@ -12,6 +12,15 @@ import base64
 import pandas as pd
 import calendar
 from datetime import date, datetime, timedelta
+from db.connection import engine
+from models import Base
+
+from auth import db_add_user
+from db.connection import get_db_connection
+from sqlalchemy import text
+
+Base.metadata.create_all(engine)
+
 
 # =============================================================================
 # Shared theme & DataTable styles for dark mode
@@ -72,6 +81,26 @@ from db.queries import (
     db_fetch_affected_tasks_report,
     _fetch_dashboard_data
 )
+
+def ensure_default_admin():
+    """Create an initial admin if no users exist yet."""
+    with get_db_connection() as conn:
+        result = conn.execute(text("SELECT COUNT(*) FROM users"))
+        count = result.scalar()
+        if count == 0:
+            # Only create if the table is empty!
+            created = db_add_user(
+                username="admin",
+                password="1234",  # Change to something strong later!
+                privilege="Admin"
+            )
+            if created:
+                print(f"Default admin created: username='{admin_username}' password='{admin_password}'")
+                print("**CHANGE THIS PASSWORD IMMEDIATELY AFTER FIRST LOGIN!**")
+            else:
+                print("Failed to create default admin (user may already exist or error occurred)")
+
+ensure_default_admin()
 
 # =============================================================================
 # Attachment helper functions
