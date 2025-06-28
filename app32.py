@@ -266,21 +266,22 @@ def main_router_and_navbar(pathname: str, session_data: dict):
     return dbc.Alert("404: Page not found.", color="danger"), navbar
 
 # =============================================================================
-# (ALL YOUR OTHER CALLBACKS HERE — unchanged from your previous code)
-# === User management, login/logout, case CRUD, home page, case details, etc. ===
-# You can keep the callbacks you posted in your long version above — no need to move them.
+# (All your other callbacks: login/logout, home, cases, tasks, attachments, dashboard, report, etc. — keep as is)
+# =============================================================================
 
 # --------------------------------------------------------------------------
 # ======================== TEMPLATES CALLBACK SECTION =======================
 # --------------------------------------------------------------------------
 
-@callback(Output('templates-alert-container', 'children', allow_duplicate=True),
-          Output('template-type-list', 'children'),
-          Output('new-template-type-name', 'value'),
-          Input('add-template-type-button', 'n_clicks'),
-          State('session-store', 'data'),
-          State('new-template-type-name', 'value'),
-          prevent_initial_call=True)
+@callback(
+    Output('templates-alert-container', 'children', allow_duplicate=True),
+    Output('template-type-list', 'children'),
+    Output('new-template-type-name', 'value'),
+    Input('add-template-type-button', 'n_clicks'),
+    State('session-store', 'data'),
+    State('new-template-type-name', 'value'),
+    prevent_initial_call=True
+)
 def add_template_type(n_clicks, session_data, type_name):
     if not type_name or not type_name.strip():
         return dbc.Alert("Template name cannot be empty.", color="warning"), dash.no_update, dash.no_update
@@ -322,35 +323,7 @@ def update_selected_template(n_clicks, ids):
     selected_template_id = ctx.triggered_id['index']
     return selected_template_id
 
-@callback(
-    Output('template-tasks-container', 'children'),
-    Output('templates-alert-container', 'children', allow_duplicate=True),
-    Input('selected-template-type-id-store', 'data'),
-    Input('template-tasks-table', 'active_cell'),
-    State('template-tasks-table', 'data'),
-    State('session-store', 'data'),
-    prevent_initial_call=True
-)
-def show_and_delete_template_tasks(template_type_id, active_cell, tasks_data, session_data):
-    ctx_trigger = ctx.triggered_id
-    privilege = (session_data or {}).get('privilege')
-    alert = None
-
-    # Handle delete action
-    if ctx_trigger == 'template-tasks-table' and active_cell and active_cell.get('row') is not None and active_cell.get('column_id') == 'delete':
-        task_row = tasks_data[active_cell['row']]
-        task_id = task_row.get('task_id')
-        if task_id:
-            db_delete_task_from_template(task_id)
-            alert = dbc.Alert("Task deleted from template.", color="danger", duration=2000)
-
-    # (Re)build the task list after any event
-    if template_type_id:
-        container = build_template_tasks_container(template_type_id, privilege)
-    else:
-        container = html.Div("No template selected.")
-
-    return container, alert
+# ----------- UNIFIED template-tasks-container CALLBACK! -----------
 
 @callback(
     Output('template-tasks-container', 'children'),
@@ -361,7 +334,9 @@ def show_and_delete_template_tasks(template_type_id, active_cell, tasks_data, se
     Output('new-task-offset', 'value'),
     Output('new-task-documents', 'value'),
     Input('add-task-to-template-button', 'n_clicks'),
-    State('selected-template-type-id-store', 'data'),
+    Input('selected-template-type-id-store', 'data'),
+    Input('template-tasks-table', 'active_cell'),
+    State('template-tasks-table', 'data'),
     State('new-task-seq', 'value'),
     State('new-task-name', 'value'),
     State('new-task-status', 'value'),
@@ -370,32 +345,64 @@ def show_and_delete_template_tasks(template_type_id, active_cell, tasks_data, se
     State('session-store', 'data'),
     prevent_initial_call=True
 )
-def add_task_to_template(n_clicks, template_id, seq, name, status, offset, documents, session_data):
-    if not n_clicks:
-        raise dash.exceptions.PreventUpdate
-    if not all([template_id, seq, name, status]):
+def unified_template_tasks_callback(
+    add_task_n_clicks,
+    selected_template_id,
+    active_cell,
+    tasks_data,
+    seq, name, status, offset, documents,
+    session_data
+):
+    # Default return values
+    default = (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+    privilege = (session_data or {}).get('privilege')
+    alert = None
+    triggered_id = ctx.triggered_id
+
+    # --- 1. Handle ADD TASK ---
+    if triggered_id == 'add-task-to-template-button':
+        if not all([selected_template_id, seq, name, status]):
+            return (
+                dash.no_update,
+                dbc.Alert("Please fill in all required fields.", color="warning"),
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            )
+        db_add_task_to_template(selected_template_id, seq, name, status, offset, documents)
+        alert = dbc.Alert(f"Task '{name}' added to template.", color="success", duration=2500)
+        # Reset input fields
         return (
-            dash.no_update,
-            dbc.Alert("Please fill in all required fields.", color="warning"),
+            build_template_tasks_container(selected_template_id, privilege),
+            alert,
+            None, "", "Not Started", None, ""
+        )
+
+    # --- 2. Handle DELETE TASK (in table) ---
+    if triggered_id == 'template-tasks-table' and active_cell and active_cell.get('row') is not None and active_cell.get('column_id') == 'delete':
+        task_row = tasks_data[active_cell['row']]
+        task_id = task_row.get('task_id')
+        if task_id:
+            db_delete_task_from_template(task_id)
+            alert = dbc.Alert("Task deleted from template.", color="danger", duration=2000)
+        return (
+            build_template_tasks_container(selected_template_id, privilege),
+            alert,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         )
-    db_add_task_to_template(template_id, seq, name, status, offset, documents)
-    privilege = (session_data or {}).get('privilege', '')
-    alert = dbc.Alert(f"Task '{name}' added to template.", color="success", duration=2500)
-    return (
-        build_template_tasks_container(template_id, privilege),
-        alert,
-        None,
-        "",
-        "Not Started",
-        None,
-        ""
-    )
+
+    # --- 3. Handle TEMPLATE TYPE SELECTION (just viewing) ---
+    if triggered_id == 'selected-template-type-id-store':
+        return (
+            build_template_tasks_container(selected_template_id, privilege),
+            None,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        )
+
+    # Fallback: Do nothing
+    return default
 
 # --------------------------------------------------------------------------
 # ======================== END TEMPLATES CALLBACK SECTION ===================
 # --------------------------------------------------------------------------
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=8050)
