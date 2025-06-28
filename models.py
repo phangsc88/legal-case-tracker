@@ -53,3 +53,29 @@ class Task(Base):
 #     file_path = Column(String(512), nullable=False)
 #     uploaded_at = Column(DateTime, server_default=func.now())
 #     case = relationship('Case')
+
+# --- TemplateType Table ---
+class TemplateType(Base):
+    __tablename__ = "template_types"
+    template_type_id = Column(Integer, primary_key=True, autoincrement=True)
+    type_name = Column(String(128), nullable=False, unique=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+# --- TaskAttachment Table ---
+class TaskAttachment(Base):
+    __tablename__ = "task_attachments"
+    attachment_id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, ForeignKey('tasks.task_id'), nullable=False)
+    original_filename = Column(String(256), nullable=False)
+    stored_filename = Column(String(256), nullable=False)
+    uploaded_by = Column(String(64))
+    uploaded_at = Column(DateTime, server_default=func.now())
+
+# --- Remark Table ---
+class Remark(Base):
+    __tablename__ = "remarks"
+    remark_id = Column(Integer, primary_key=True, autoincrement=True)
+    case_id = Column(Integer, ForeignKey('cases.case_id'), nullable=False)
+    user_name = Column(String(64))
+    message = Column(Text)
+    created_at = Column(DateTime, server_default=func.now())
