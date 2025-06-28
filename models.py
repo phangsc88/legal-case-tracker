@@ -1,4 +1,3 @@
-# models.py
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, func, Boolean
 from sqlalchemy.orm import relationship
@@ -14,14 +13,11 @@ class User(Base):
     privilege = Column(String(16), nullable=False, default='User')
     created_at = Column(DateTime, server_default=func.now())
 
-    # For relationship with cases/tasks if you need
-    # cases = relationship('Case', back_populates='user')
-
 # --- Case Table ---
 class Case(Base):
     __tablename__ = "cases"
     case_id = Column(Integer, primary_key=True, autoincrement=True)
-    case_name = Column(String(256), nullable=False)  # <-- change here!
+    case_name = Column(String(256), nullable=False)
     case_type = Column(String(128), nullable=False)
     description = Column(Text)
     status = Column(String(32), nullable=False, default='Not Started')
@@ -30,32 +26,24 @@ class Case(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    # Example: assigned_to = Column(Integer, ForeignKey('users.user_id'))
-    # user = relationship('User', back_populates='cases')
-
 # --- Task Table ---
 class Task(Base):
     __tablename__ = "tasks"
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     case_id = Column(Integer, ForeignKey('cases.case_id'), nullable=False)
-    task_name = Column(String(256), nullable=False)  # <- use task_name for consistency
+    task_name = Column(String(256), nullable=False)
     description = Column(Text)
     status = Column(String(32), nullable=False, default='Not Started')
     due_date = Column(DateTime)
+    day_offset = Column(Integer)
+    documents_required = Column(Text)
     task_start_date = Column(DateTime)
     task_completed_date = Column(DateTime)
+    last_updated_by = Column(String(64))
+    last_updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     case = relationship('Case')
-
-# --- Example: Add more tables as needed ---
-# class Document(Base):
-#     __tablename__ = "documents"
-#     document_id = Column(Integer, primary_key=True, autoincrement=True)
-#     case_id = Column(Integer, ForeignKey('cases.case_id'), nullable=False)
-#     file_path = Column(String(512), nullable=False)
-#     uploaded_at = Column(DateTime, server_default=func.now())
-#     case = relationship('Case')
 
 # --- TemplateType Table ---
 class TemplateType(Base):
@@ -63,6 +51,17 @@ class TemplateType(Base):
     template_type_id = Column(Integer, primary_key=True, autoincrement=True)
     type_name = Column(String(128), nullable=False, unique=True)
     created_at = Column(DateTime, server_default=func.now())
+
+# --- TaskTemplate Table (missing before!) ---
+class TaskTemplate(Base):
+    __tablename__ = "task_templates"
+    task_template_id = Column(Integer, primary_key=True, autoincrement=True)
+    template_type_id = Column(Integer, ForeignKey('template_types.template_type_id'), nullable=False)
+    task_sequence = Column(Integer, nullable=False)
+    task_name = Column(String(256), nullable=False)
+    default_status = Column(String(32), nullable=False, default='Not Started')
+    day_offset = Column(Integer)
+    documents_required = Column(Text)
 
 # --- TaskAttachment Table ---
 class TaskAttachment(Base):
@@ -72,13 +71,14 @@ class TaskAttachment(Base):
     original_filename = Column(String(256), nullable=False)
     stored_filename = Column(String(256), nullable=False)
     uploaded_by = Column(String(64))
-    uploaded_at = Column(DateTime, server_default=func.now())
+    upload_timestamp = Column(DateTime, server_default=func.now())  # renamed for consistency with queries.py
 
-# --- Remark Table ---
-class Remark(Base):
-    __tablename__ = "remarks"
+# --- Remark Table (case_remarks for consistency with queries.py) ---
+class CaseRemark(Base):
+    __tablename__ = "case_remarks"
     remark_id = Column(Integer, primary_key=True, autoincrement=True)
     case_id = Column(Integer, ForeignKey('cases.case_id'), nullable=False)
     user_name = Column(String(64))
     message = Column(Text)
-    created_at = Column(DateTime, server_default=func.now())
+    timestamp = Column(DateTime, server_default=func.now())
+
