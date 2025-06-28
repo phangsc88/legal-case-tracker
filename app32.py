@@ -15,6 +15,12 @@ from datetime import date, datetime, timedelta
 from db.connection import engine
 from models import Base
 
+# --- TEMPORARY: Drop and recreate all tables ---
+if os.environ.get("RESET_DB") == "1":
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    print("All tables dropped and recreated!")
+
 from auth import db_add_user
 from db.connection import get_db_connection
 from sqlalchemy import text
