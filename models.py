@@ -21,7 +21,7 @@ class User(Base):
 class Case(Base):
     __tablename__ = "cases"
     case_id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(256), nullable=False)
+    case_name = Column(String(256), nullable=False)  # <-- change here!
     description = Column(Text)
     status = Column(String(32), nullable=False, default='Not Started')
     created_at = Column(DateTime, server_default=func.now())
