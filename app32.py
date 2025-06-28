@@ -327,7 +327,7 @@ def update_selected_template(n_clicks, ids):
 
 @callback(
     Output('template-tasks-container', 'children'),
-    Output('templates-alert-container', 'children'),
+    Output('templates-alert-container', 'children',allow_duplicate=True),
     Output('new-task-seq', 'value'),
     Output('new-task-name', 'value'),
     Output('new-task-status', 'value'),
