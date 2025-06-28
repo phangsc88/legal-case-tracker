@@ -101,7 +101,7 @@ def ensure_default_admin():
                 privilege="Admin"
             )
             if created:
-                print(f"Default admin created: username='{admin_username}' password='{admin_password}'")
+                print(f"Default admin created: username='admin' password='1234'")
                 print("**CHANGE THIS PASSWORD IMMEDIATELY AFTER FIRST LOGIN!**")
             else:
                 print("Failed to create default admin (user may already exist or error occurred)")
