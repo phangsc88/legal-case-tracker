@@ -906,7 +906,144 @@ def handle_delete_attachment(n_clicks_list, task_id):
         db_delete_attachment(attachment_id)
     return build_attachments_list(task_id)
 
+# Call back for Add Task in Templates Page
+@callback(
+    Output('template-tasks-container', 'children'),
+    Output('templates-alert-container', 'children'),
+    Output('new-task-seq', 'value'),
+    Output('new-task-name', 'value'),
+    Output('new-task-status', 'value'),
+    Output('new-task-offset', 'value'),
+    Output('new-task-documents', 'value'),
+    Input('add-task-to-template-button', 'n_clicks'),
+    State('selected-template-type-id-store', 'data'),
+    State('new-task-seq', 'value'),
+    State('new-task-name', 'value'),
+    State('new-task-status', 'value'),
+    State('new-task-offset', 'value'),
+    State('new-task-documents', 'value'),
+    State('session-store', 'data'),
+    prevent_initial_call=True
+)
+def add_task_to_template(n_clicks, template_id, seq, name, status, offset, documents, session_data):
+    # Validation
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    if not all([template_id, seq, name, status]):
 
+        return (
+            dash.no_update,
+            dbc.Alert("Please fill in all required fields.", color="warning"),
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        )
+    # Actually add the task
+    db_add_task_to_template(template_id, seq, name, status, offset, documents)
+    privilege = (session_data or {}).get('privilege', '')
+    alert = dbc.Alert(f"Task '{name}' added to template.", color="success", duration=2500)
+    # Reset fields: seq=None, name="", status="Not Started", offset=None, documents=""
+    return (
+        build_template_tasks_container(template_id, privilege),
+        alert,
+        None,        # seq
+        "",          # name
+        "Not Started", # status (or your default)
+        None,        # offset
+        ""           # documents
+    )
+
+# Call back for the "Delete" Temaplates Type
+@callback(
+    Output('delete-template-modal', 'is_open', allow_duplicate=True),
+    Output('delete-template-id-store', 'data', allow_duplicate=True),
+    Output('delete-template-confirm-text', 'children', allow_duplicate=True),
+    Input({'type': 'delete-template-btn', 'index': ALL}, 'n_clicks'),
+    State({'type': 'delete-template-btn', 'index': ALL}, 'id'),
+    prevent_initial_call=True
+)
+def open_delete_template_modal(n_clicks, btn_ids):
+    if not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
+
+    # Get which button was pressed
+    triggered = ctx.triggered_id
+    if triggered and isinstance(triggered, dict):
+        template_type_id = triggered['index']
+        confirm_text = "Are you sure you want to delete this template type? This action cannot be undone."
+        return True, template_type_id, confirm_text
+    raise dash.exceptions.PreventUpdate
+
+@callback(
+    Output('template-type-list', 'children', allow_duplicate=True),
+    Output('templates-alert-container', 'children', allow_duplicate=True),
+    Output('delete-template-modal', 'is_open', allow_duplicate=True),
+    Input('confirm-delete-template-button', 'n_clicks'),
+    State('delete-template-id-store', 'data'),
+    State('session-store', 'data'),
+    prevent_initial_call=True
+)
+def confirm_delete_template_type(n_clicks, template_type_id, session_data):
+    if not n_clicks or not template_type_id:
+        raise dash.exceptions.PreventUpdate
+    db_delete_template_type(template_type_id)
+    updated_types_df = db_fetch_template_types()
+    updated_types = updated_types_df.to_dict('records') if not updated_types_df.empty else []
+
+    privilege = (session_data or {}).get('privilege')
+    is_admin = (privilege == 'Admin')
+
+    def create_template_item(tt):
+        if is_admin:
+            return dbc.ListGroupItem(
+                dbc.Row([
+                    dbc.Col(tt['type_name'], width=9, className="d-flex align-items-center"),
+                    dbc.Col(dmc.Button("Delete", id={'type': 'delete-template-btn', 'index': tt['template_type_id']},
+                                       color="red", variant="subtle", size="xs"), width=3,
+                            className="d-flex justify-content-end")
+                ], align="center"),
+                id={'type': 'template-type-item', 'index': tt['template_type_id']}, action=True
+            )
+        return dbc.ListGroupItem(tt['type_name'], id={'type': 'template-type-item', 'index': tt['template_type_id']},
+                                 action=True)
+
+    new_list = [create_template_item(tt) for tt in updated_types]
+    return new_list, dbc.Alert("Template type deleted.", color="danger", duration=2000), False
+
+@callback(
+    Output('delete-template-modal', 'is_open', allow_duplicate=True),
+    Input('cancel-delete-template-button', 'n_clicks'),
+    prevent_initial_call=True
+)
+def cancel_delete_template_modal(n_clicks):
+    if n_clicks:
+        return False
+    raise dash.exceptions.PreventUpdate
+
+#Call back to delete task when click the X
+
+@callback(
+    Output('template-tasks-container', 'children', allow_duplicate=True),
+    Output('templates-alert-container', 'children', allow_duplicate=True),
+    Input('template-tasks-table', 'active_cell'),
+    State('template-tasks-table', 'data'),
+    State('selected-template-type-id-store', 'data'),
+    State('session-store', 'data'),
+    prevent_initial_call=True
+)
+def delete_task_from_template(active_cell, data, template_type_id, session_data):
+    if not active_cell or active_cell.get('row') is None or active_cell.get('column_id') != 'delete':
+        raise dash.exceptions.PreventUpdate
+    task_row = data[active_cell['row']]
+    task_id = task_row.get('task_id')
+    if not task_id:
+        raise dash.exceptions.PreventUpdate
+    db_delete_task_from_template(task_id)
+    privilege = (session_data or {}).get('privilege')
+    alert = dbc.Alert("Task deleted from template.", color="danger", duration=2000)
+    return build_template_tasks_container(template_type_id, privilege), alert
+
+
+
+# Ending of app.py
 
 if __name__ == '__main__':
     app.run(debug=True, port=8050)
