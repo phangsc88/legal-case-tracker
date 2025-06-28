@@ -16,20 +16,20 @@ from db.connection import engine
 from models import Base
 
 # --- TEMPORARY: Drop and recreate all tables ---
+from sqlalchemy import text
+
 if os.environ.get("RESET_DB") == "1":
-    Base.metadata.drop_all(engine)
-    print("All tables dropped!")
+    # DANGEROUS: Drops all tables, constraints, everything in schema "public"
+    with engine.connect() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+        conn.commit()
+    print("All tables dropped (CASCADE) and recreated schema!")
     Base.metadata.create_all(engine)
-    print("All tables recreated!")
-else:
-    print("RESET_DB not set. No action taken.")
 
 from auth import db_add_user
 from db.connection import get_db_connection
-from sqlalchemy import text
-
 Base.metadata.create_all(engine)
-
 
 # =============================================================================
 # Shared theme & DataTable styles for dark mode
