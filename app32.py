@@ -18,8 +18,11 @@ from models import Base
 # --- TEMPORARY: Drop and recreate all tables ---
 if os.environ.get("RESET_DB") == "1":
     Base.metadata.drop_all(engine)
+    print("All tables dropped!")
     Base.metadata.create_all(engine)
-    print("All tables dropped and recreated!")
+    print("All tables recreated!")
+else:
+    print("RESET_DB not set. No action taken.")
 
 from auth import db_add_user
 from db.connection import get_db_connection
