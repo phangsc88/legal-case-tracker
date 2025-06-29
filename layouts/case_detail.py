@@ -1,6 +1,7 @@
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+import pandas as pd # <--- ADDED THIS IMPORT for pd.DataFrame and pd.notnull
 
 # bring in all four DB functions you actually use here
 from db.queries import (
@@ -10,6 +11,10 @@ from db.queries import (
     db_fetch_attachments_for_task,
     db_fetch_remarks_for_case,
 )
+
+# your shared theme & styles
+from utils.styles import DARK_THEME, DATATABLE_STYLE_DARK
+
 def build_attachments_list(task_id):
     attachments_df = db_fetch_attachments_for_task(task_id)
     if attachments_df.empty:
@@ -40,11 +45,6 @@ def build_attachments_list(task_id):
         )
         items.append(item)
     return dbc.ListGroup(items, flush=True)
-# performance calc isn’t used in this file; you can remove it if unused
-# from utils.performance import calculate_task_performance
-
-# your shared theme & styles
-from utils.styles import DARK_THEME, DATATABLE_STYLE_DARK
 
 def build_remarks_display_component(case_id: int):
     remarks_df = db_fetch_remarks_for_case(case_id)
@@ -61,7 +61,83 @@ def build_remarks_display_component(case_id: int):
     ]
 
 
+# =============================================================================
+# REPLACEMENT for build_tasks_table_component (Now in layouts/case_detail.py)
+# =============================================================================
+# --- CORRECTED FUNCTION SIGNATURE: MUST ACCEPT 'privilege' ---
 
+# In layouts/case_detail.py
+
+def build_tasks_table_component(case_id: int, privilege: str):
+    tasks_df = db_fetch_tasks_for_case(case_id)
+    is_editor_or_admin = (privilege in ['Admin', 'Editor'])
+
+    if tasks_df.empty:
+        return dbc.Alert("No tasks for this case.", color="info", className="mt-3")
+
+    table_data = tasks_df.to_dict('records')
+
+    if is_editor_or_admin:
+        for row in table_data:
+            row['action'] = 'Edit'
+
+    table_columns = [
+        {"name": "Task Name", "id": "task_name"},
+        {"name": "Status", "id": "status"},
+        {"name": "Performance", "id": "performance"},
+        {"name": "Due Date", "id": "due_date_display"},
+        {"name": "Start Date", "id": "task_start_date"},
+        {"name": "Completed Date", "id": "task_completed_date"},
+        {"name": "Last Updated By", "id": "last_updated_by"},
+        {"name": "Last Update Date", "id": "last_updated_at_display"},
+    ]
+
+    if is_editor_or_admin:
+        table_columns.append({"name": "Action", "id": "action"})
+
+    # --- THIS IS THE FIX ---
+
+    # 1. Start with your base styles
+    table_styles = DATATABLE_STYLE_DARK.copy()
+
+    # 2. Define the new conditional styles for performance
+    performance_styles = [
+        {'if': {'filter_query': '{performance} = "Completed On Time"'}, 'backgroundColor': '#1F4B2D',
+         'color': '#E6F4EA'},
+        {'if': {'filter_query': '{performance} = "On Time"'}, 'backgroundColor': '#1F4B2D', 'color': '#E6F4EA'},
+        {'if': {'filter_query': '{performance} = "Completed Late"'}, 'backgroundColor': '#663C00', 'color': '#FFECB3'},
+        {'if': {'filter_query': '{performance} = "Overdue"'}, 'backgroundColor': '#5C2223', 'color': '#FEEBEE'},
+        {'if': {'filter_query': '{performance} = "Pending"'}, 'backgroundColor': '#373A40', 'color': '#A6A7AB'},
+    ]
+
+    # 3. Combine the new styles with any existing styles
+    #    This ensures we don't pass the same argument twice.
+    if 'style_data_conditional' in table_styles:
+        table_styles['style_data_conditional'].extend(performance_styles)
+    else:
+        table_styles['style_data_conditional'] = performance_styles
+
+    # Add the action column style to the cell conditional styles
+    action_style = {'if': {'column_id': 'action'},
+                    'width': '80px', 'textAlign': 'center',
+                    'color': DARK_THEME["colors"]["blue"][3],
+                    'textDecoration': 'underline', 'cursor': 'pointer'}
+
+    if 'style_cell_conditional' in table_styles:
+        table_styles['style_cell_conditional'].append(action_style)
+    else:
+        table_styles['style_cell_conditional'] = [action_style]
+
+    # 4. Create the DataTable, passing the combined styles dictionary
+    return dash_table.DataTable(
+        id='detail-tasks-table',
+        columns=table_columns,
+        data=table_data,
+        markdown_options={"html": True},
+        **table_styles  # Unpack all the combined styles here
+    )
+
+# --- build_case_detail_layout (itself) ---
 def build_case_detail_layout(case_id: int, username: str, privilege: str):
     case_info = db_fetch_single_case(case_id)
     if not case_info: return dbc.Alert(f"Case with ID {case_id} not found.", color="danger")
@@ -97,7 +173,7 @@ def build_case_detail_layout(case_id: int, username: str, privilege: str):
             ])
         ])),
         html.H3("Tasks", className="text-center my-4"),
-        html.Div(id='detail-tasks-table-container', children=build_tasks_table_component(case_id)),
+        html.Div(id='detail-tasks-table-container', children=build_tasks_table_component(case_id, privilege)), # <--- ADDED COMMA HERE
 
         dbc.Modal([
             dbc.ModalHeader("Edit Task"),
@@ -152,7 +228,7 @@ def build_case_detail_layout(case_id: int, username: str, privilege: str):
                 ])),
                 html.Hr(),
                 html.H5("Existing Attachments"),
-                html.Div(id='existing-attachments-area')
+                html.Div(id='attachment-list-container')
             ]),
             dbc.ModalFooter(
                 dmc.Button("Close", id="close-attachment-modal", variant="outline")
@@ -173,58 +249,3 @@ def build_case_detail_layout(case_id: int, username: str, privilege: str):
             html.Div(id='remarks-display-area', className="mt-3", children=build_remarks_display_component(case_id))
         ]))
     ])
-
-
-# =============================================================================
-# REPLACEMENT for build_tasks_table_component (Bug Fix)
-# =============================================================================
-def build_tasks_table_component(case_id: int):
-    tasks_df = db_fetch_tasks_for_case(case_id)
-    if not tasks_df.empty:
-        attachment_counts = []
-        for task_id in tasks_df['task_id']:
-            attachments_df = db_fetch_attachments_for_task(task_id)
-            count = len(attachments_df)
-            attachment_counts.append(f"{count} file(s)")
-        tasks_df['attachments'] = attachment_counts
-        tasks_df['edit'] = "Edit"
-    else:
-        tasks_df = tasks_df.assign(attachments=[], edit=[])
-
-    table_columns = [
-        {"name": "Task Name", "id": "task_name"},
-        {"name": "Status", "id": "status"},
-        {"name": "Performance", "id": "performance"},
-        {"name": "Documents Required", "id": "documents_required"},
-        {"name": "Attachments", "id": "attachments"},
-        {"name": "Due Date", "id": "due_date_display"},
-        {"name": "Start Date", "id": "task_start_date"},
-        {"name": "Completed Date", "id": "task_completed_date"},
-        {"name": "Last Updated By", "id": "last_updated_by"},
-        {"name": "Last Update Date", "id": "last_updated_at_display"},
-        {"name": "Action", "id": "edit"}
-    ]
-
-    # --- BUG FIX IS HERE ---
-    # 1. Create a local copy of the styles to avoid modifying the global dict
-    table_styles = DATATABLE_STYLE_DARK.copy()
-    # 2. Update the style_cell property in the local copy with our new styles
-    table_styles['style_cell'] = {
-        **DATATABLE_STYLE_DARK['style_cell'],
-        'whiteSpace': 'pre-line',
-        'height': 'auto',
-    }
-    # --- END OF BUG FIX ---
-
-    return dash_table.DataTable(
-        id='detail-tasks-table',
-        columns=table_columns,
-        data=tasks_df.to_dict('records'),
-        **table_styles,  # 3. Use the fully combined and corrected styles dictionary
-        style_cell_conditional=[
-            {'if': {'column_id': 'edit'}, 'color': DARK_THEME["colors"]["blue"][5],
-             'textDecoration': 'underline', 'cursor': 'pointer'},
-            {'if': {'column_id': 'attachments'}, 'color': DARK_THEME["colors"]["blue"][3],
-             'textDecoration': 'underline', 'cursor': 'pointer'}
-        ]
-    )
