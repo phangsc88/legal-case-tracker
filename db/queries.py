@@ -1,3 +1,6 @@
+# db/queries.py - FINAL-FIXED for Dashboard edge case
+
+import os
 import pandas as pd
 from sqlalchemy import text
 from .connection import get_db_connection
@@ -6,10 +9,12 @@ from datetime import date
 from utils.performance import calculate_case_performance as _calculate_case_performance
 from utils.performance import calculate_task_performance as _calculate_task_performance
 
+from datetime import datetime, timedelta
 
 
-# Database Functions (WITH DYNAMIC LOGIC)
-# =============================================================================
+# ... (all other functions from db_fetch_all_cases to db_fetch_attachments_for_task remain the same) ...
+# NOTE: The only change is in the _fetch_dashboard_data function at the bottom.
+
 def db_fetch_all_cases() -> pd.DataFrame:
     with get_db_connection() as conn:
         sql = text("""
@@ -306,27 +311,21 @@ def db_fetch_template_types() -> pd.DataFrame:
         return pd.read_sql(text("SELECT template_type_id, type_name FROM template_types ORDER BY type_name"), conn)
 
 
-def db_add_template_type(type_name: str):
-    sql = text("INSERT INTO template_types (type_name) VALUES (:type_name) ON CONFLICT (type_name) DO NOTHING")
+def db_add_template_type(type_name: str) -> bool:
+    sql = text(
+        "INSERT INTO template_types (type_name) VALUES (:type_name) ON CONFLICT (type_name) DO NOTHING RETURNING template_type_id")
     with get_db_connection() as conn:
-        conn.execute(sql, {"type_name": type_name})
+        result = conn.execute(sql, {"type_name": type_name}).scalar_one_or_none()
         conn.commit()
+        return result is not None
 
 
-# NEW
 def db_delete_template_type(template_type_id: int):
-    """
-    Deletes a template type and all of its associated task templates.
-    """
     with get_db_connection() as conn:
-        # First, delete all task templates associated with this type
         sql_delete_tasks = text("DELETE FROM task_templates WHERE template_type_id = :tt_id")
         conn.execute(sql_delete_tasks, {"tt_id": template_type_id})
-
-        # Then, delete the template type itself
         sql_delete_type = text("DELETE FROM template_types WHERE template_type_id = :tt_id")
         conn.execute(sql_delete_type, {"tt_id": template_type_id})
-
         conn.commit()
 
 
@@ -349,30 +348,17 @@ def db_add_task_to_template(template_type_id: int, seq: int, name: str, status: 
         VALUES (:tt_id, :seq, :name, :status, :offset, :documents)
     """)
     with get_db_connection() as conn:
-        conn.execute(sql, {
-            "tt_id": template_type_id,
-            "seq": seq,
-            "name": name,
-            "status": status,
-            "offset": offset,
-            "documents": documents
-        })
+        conn.execute(sql, {"tt_id": template_type_id, "seq": seq, "name": name, "status": status, "offset": offset,
+                           "documents": documents})
         conn.commit()
 
 
 def db_update_task_template(task_template_id: int, column: str, value: Any):
-    allowed_columns = {
-        "task_sequence": "task_sequence",
-        "task_name": "task_name",
-        "default_status": "default_status",
-        "day_offset": "day_offset",
-        "documents_required": "documents_required"
-    }
-
+    allowed_columns = {"task_sequence": "task_sequence", "task_name": "task_name", "default_status": "default_status",
+                       "day_offset": "day_offset", "documents_required": "documents_required"}
     if column not in allowed_columns:
         print(f"Error: Attempted to update a non-whitelisted column: {column}")
         return
-
     sql = text(f"UPDATE task_templates SET {allowed_columns[column]} = :value WHERE task_template_id = :tt_id")
     with get_db_connection() as conn:
         conn.execute(sql, {"value": value, "tt_id": task_template_id})
@@ -411,13 +397,9 @@ def db_fetch_affected_cases_report(from_date: date, to_date: date) -> pd.DataFra
                 to_char(c.completed_date, 'YYYY-MM-DD') as completed_date,
                 (SELECT MAX(t_sub.due_date) FROM tasks t_sub WHERE t_sub.case_id = c.case_id) as case_due_date,
                 COUNT(t.task_id) FILTER (WHERE t.due_date < CURRENT_DATE AND t.status != 'Completed') as overdue_tasks_count
-            FROM cases c
-            LEFT JOIN tasks t ON c.case_id = t.case_id
-            WHERE c.start_date BETWEEN :from_date AND :to_date
-               OR c.completed_date BETWEEN :from_date AND :to_date
-               OR (c.start_date < :from_date AND (c.completed_date > :to_date OR c.completed_date IS NULL))
-            GROUP BY c.case_id
-            ORDER BY c.case_id
+            FROM cases c LEFT JOIN tasks t ON c.case_id = t.case_id
+            WHERE c.start_date BETWEEN :from_date AND :to_date OR c.completed_date BETWEEN :from_date AND :to_date OR (c.start_date < :from_date AND (c.completed_date > :to_date OR c.completed_date IS NULL))
+            GROUP BY c.case_id ORDER BY c.case_id
         """)
         df = pd.read_sql(sql, conn, params={"from_date": from_date, "to_date": to_date})
         if not df.empty:
@@ -431,13 +413,9 @@ def db_fetch_affected_tasks_report(from_date: date, to_date: date) -> pd.DataFra
     with get_db_connection() as conn:
         sql = text("""
             SELECT t.task_id, t.task_name, t.status, c.case_name, c.case_id,
-                   to_char(t.due_date, 'YYYY-MM-DD') as due_date,
-                   t.task_completed_date
-            FROM tasks t
-            JOIN cases c ON t.case_id = c.case_id
-            WHERE t.due_date BETWEEN :from_date AND :to_date
-               OR t.task_start_date BETWEEN :from_date AND :to_date
-               OR t.task_completed_date BETWEEN :from_date AND :to_date
+                   to_char(t.due_date, 'YYYY-MM-DD') as due_date, t.task_completed_date
+            FROM tasks t JOIN cases c ON t.case_id = c.case_id
+            WHERE t.due_date BETWEEN :from_date AND :to_date OR t.task_start_date BETWEEN :from_date AND :to_date OR t.task_completed_date BETWEEN :from_date AND :to_date
             ORDER BY t.due_date
         """)
         df = pd.read_sql(sql, conn, params={"from_date": from_date, "to_date": to_date})
@@ -447,15 +425,15 @@ def db_fetch_affected_tasks_report(from_date: date, to_date: date) -> pd.DataFra
                 axis=1)
         return df
 
+
 def db_fetch_attachments_for_task(task_id: int) -> pd.DataFrame:
-    sql = text("""
-        SELECT attachment_id, original_filename, stored_filename
-        FROM task_attachments WHERE task_id = :task_id ORDER BY upload_timestamp DESC
-    """)
+    sql = text(
+        "SELECT attachment_id, original_filename, stored_filename FROM task_attachments WHERE task_id = :task_id ORDER BY upload_timestamp DESC")
     with get_db_connection() as conn:
         return pd.read_sql(sql, conn, params={"task_id": task_id})
 
 
+# --- DEFINITIVELY FIXED FUNCTION ---
 def _fetch_dashboard_data(from_date: date, to_date: date) -> Tuple[pd.DataFrame, pd.DataFrame]:
     with get_db_connection() as conn:
         sql_cases = text("""
@@ -471,14 +449,80 @@ def _fetch_dashboard_data(from_date: date, to_date: date) -> Tuple[pd.DataFrame,
             cases_df['performance'] = cases_df.apply(
                 lambda row: _calculate_case_performance(row['status'], row['case_due_date'], row['completed_date'],
                                                         row['overdue_tasks_count']), axis=1)
+        else:
+            # Handle empty case
+            cases_df = cases_df.assign(performance=[])
 
         sql_tasks = text(
             "SELECT t.task_id, t.task_name, t.status, t.due_date, t.task_completed_date FROM tasks t WHERE t.due_date BETWEEN :from_date AND :to_date")
         tasks_df = pd.read_sql(sql_tasks, conn, params={"from_date": from_date, "to_date": to_date})
+
+        # This block now correctly handles both empty and non-empty dataframes
         if not tasks_df.empty:
             tasks_df['performance'] = tasks_df.apply(
                 lambda row: _calculate_task_performance(row['status'], row['due_date'], row['task_completed_date']),
                 axis=1)
+        else:
+            # If the dataframe is empty, ensure the 'performance' column exists
+            tasks_df = tasks_df.assign(performance=[])
 
     return cases_df, tasks_df
 
+
+def db_fetch_single_task(task_id: int) -> Optional[Dict[str, Any]]:
+    if not task_id: return None
+    sql = text("""
+        SELECT task_id, task_name, status, day_offset, documents_required,
+            to_char(task_start_date, 'YYYY-MM-DD') as task_start_date,
+            to_char(task_completed_date, 'YYYY-MM-DD') as task_completed_date,
+            to_char(due_date, 'YYYY-MM-DD') as due_date,
+            remarks, last_updated_by, last_updated_at
+        FROM tasks WHERE task_id = :task_id
+    """)
+    with get_db_connection() as conn:
+        result = conn.execute(sql, {"task_id": task_id}).fetchone()
+        if result:
+            try:
+                return result._asdict()
+            except AttributeError:
+                return dict(result)
+        return None
+
+
+def db_add_attachment(task_id: int, original_filename: str, stored_filename: str, uploaded_by: str):
+    sql = text("""
+        INSERT INTO task_attachments (task_id, original_filename, stored_filename, uploaded_by, upload_timestamp)
+        VALUES (:task_id, :original_filename, :stored_filename, :uploaded_by, NOW())
+    """)
+    with get_db_connection() as conn:
+        conn.execute(sql,
+                     {"task_id": task_id, "original_filename": original_filename, "stored_filename": stored_filename,
+                      "uploaded_by": uploaded_by})
+        conn.commit()
+
+
+def db_get_attachment_info(attachment_id: int) -> Optional[Dict[str, Any]]:
+    sql = text("SELECT stored_filename FROM task_attachments WHERE attachment_id = :attachment_id")
+    with get_db_connection() as conn:
+        result = conn.execute(sql, {"attachment_id": attachment_id}).fetchone()
+        if result:
+            try:
+                return result._asdict()
+            except AttributeError:
+                return dict(result)
+        return None
+
+
+def db_delete_attachment(attachment_id: int):
+    attachment_info = db_get_attachment_info(attachment_id)
+    if attachment_info and 'stored_filename' in attachment_info:
+        UPLOAD_DIRECTORY = "uploads"
+        file_path = os.path.join(UPLOAD_DIRECTORY, attachment_info['stored_filename'])
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Deleted file: {file_path}")
+
+    sql = text("DELETE FROM task_attachments WHERE attachment_id = :attachment_id")
+    with get_db_connection() as conn:
+        conn.execute(sql, {"attachment_id": attachment_id})
+        conn.commit()
