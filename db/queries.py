@@ -1,19 +1,185 @@
-# db/queries.py - FINAL-FIXED for Dashboard edge case
+# db/queries.py
 
 import os
 import pandas as pd
 from sqlalchemy import text
 from .connection import get_db_connection
 from typing import Optional, Dict, Any, Tuple
-from datetime import date
+from datetime import date, datetime, timedelta
 from utils.performance import calculate_case_performance as _calculate_case_performance
 from utils.performance import calculate_task_performance as _calculate_task_performance
 
-from datetime import datetime, timedelta
+
+# =============================================================================
+# HELPER FUNCTIONS (Defined first)
+# =============================================================================
+def db_revert_case_if_inactive(case_id: int):
+    """
+    Checks if an 'In Progress' case has any active tasks left.
+    If not, reverts the case to 'Not Started' and clears its start date.
+    """
+    with get_db_connection() as conn:
+        case_status = conn.execute(
+            text("SELECT status FROM cases WHERE case_id = :case_id"),
+            {"case_id": case_id}
+        ).scalar_one_or_none()
+
+        if case_status != 'In Progress':
+            return
+
+        active_task_count = conn.execute(
+            text("""
+                SELECT COUNT(*) FROM tasks
+                WHERE case_id = :case_id AND status IN ('In Progress', 'Completed')
+            """),
+            {"case_id": case_id}
+        ).scalar_one()
+
+        if active_task_count == 0:
+            conn.execute(
+                text("UPDATE cases SET status = 'Not Started', start_date = NULL WHERE case_id = :case_id"),
+                {"case_id": case_id}
+            )
+            conn.commit()
 
 
-# ... (all other functions from db_fetch_all_cases to db_fetch_attachments_for_task remain the same) ...
-# NOTE: The only change is in the _fetch_dashboard_data function at the bottom.
+# =============================================================================
+# MAIN DB FUNCTIONS
+# =============================================================================
+
+def db_add_task_to_case(case_id: int, task_name: str, documents_required: str, day_offset: Optional[int],
+                        insert_after_task_id: int, updated_by: str):
+    """Adds a new task to a case, calculating its sequence and immediately setting its due date if the case has already started."""
+    with get_db_connection() as conn:
+        sql_get_sequences = text(
+            "SELECT task_id, task_sequence FROM tasks WHERE case_id = :case_id ORDER BY task_sequence")
+        tasks = conn.execute(sql_get_sequences, {"case_id": case_id}).fetchall()
+
+        new_sequence = 1.0
+        if tasks:
+            if insert_after_task_id == 0:
+                first_task_seq = tasks[0]._asdict()['task_sequence']
+                new_sequence = float(first_task_seq) - 1.0
+            else:
+                task_ids = [t.task_id for t in tasks]
+                try:
+                    idx = task_ids.index(insert_after_task_id)
+                    seq_before = float(tasks[idx].task_sequence)
+                    if idx + 1 < len(tasks):
+                        seq_after = float(tasks[idx + 1].task_sequence)
+                        new_sequence = (seq_before + seq_after) / 2.0
+                    else:
+                        new_sequence = seq_before + 1.0
+                except ValueError:
+                    last_task_seq = tasks[-1]._asdict()['task_sequence']
+                    new_sequence = float(last_task_seq) + 1.0
+
+        sql_insert = text("""
+            INSERT INTO tasks (case_id, task_name, status, documents_required, day_offset, task_sequence, last_updated_by, last_updated_at)
+            VALUES (:case_id, :name, 'Not Started', :docs, :offset, :seq, :user, NOW())
+            RETURNING task_id
+        """)
+        new_task_id = conn.execute(sql_insert, {
+            "case_id": case_id, "name": task_name, "docs": documents_required,
+            "offset": day_offset, "seq": new_sequence, "user": updated_by
+        }).scalar_one()
+
+        if day_offset is not None:
+            sql_get_case_start = text("SELECT start_date FROM cases WHERE case_id = :case_id")
+            case_start_date = conn.execute(sql_get_case_start, {"case_id": case_id}).scalar_one_or_none()
+
+            if case_start_date:
+                new_due_date = case_start_date + timedelta(days=day_offset)
+                sql_update_due_date = text("UPDATE tasks SET due_date = :due_date WHERE task_id = :task_id")
+                conn.execute(sql_update_due_date, {"due_date": new_due_date, "task_id": new_task_id})
+
+        conn.commit()
+
+
+def db_delete_task(task_id: int):
+    """Deletes a single task and its attachments, then updates the parent case's status and dates."""
+    with get_db_connection() as conn:
+        sql_get_case_id = text("SELECT case_id FROM tasks WHERE task_id = :task_id")
+        case_id = conn.execute(sql_get_case_id, {"task_id": task_id}).scalar_one_or_none()
+
+        if not case_id:
+            print(f"Warning: Attempted to delete a non-existent task with ID {task_id}")
+            return
+
+        sql_delete_attachments = text("DELETE FROM task_attachments WHERE task_id = :task_id")
+        conn.execute(sql_delete_attachments, {"task_id": task_id})
+
+        sql_delete_task = text("DELETE FROM tasks WHERE task_id = :task_id")
+        conn.execute(sql_delete_task, {"task_id": task_id})
+
+        conn.commit()
+
+        db_update_case_dates_from_tasks(case_id)
+        db_check_and_complete_case(case_id)
+        db_revert_case_if_inactive(case_id)
+
+
+def db_update_task_details(task_id: int, name: str, status: str, start_date_input: Optional[str],
+                           completed_date_input: Optional[str], new_due_date_input_str: Optional[str],
+                           updated_by_user: str) -> Tuple[str, bool]:
+    today = date.today()
+    case_was_started_automatically = False
+
+    start_date_for_db = date.fromisoformat(start_date_input) if start_date_input else None
+    completed_date_for_db = date.fromisoformat(completed_date_input) if completed_date_input else None
+    due_date_for_db_str = new_due_date_input_str
+    case_id = None
+
+    with get_db_connection() as conn:
+        sql_select = text(
+            "SELECT case_id, status, task_start_date, task_completed_date, due_date FROM tasks WHERE task_id = :task_id")
+        result = conn.execute(sql_select, {"task_id": int(task_id)}).fetchone()
+        if not result: return status, False
+
+        task_data = result._asdict()
+        case_id = task_data['case_id']
+
+        final_status = status
+        if completed_date_for_db:
+            final_status = 'Completed'
+        elif start_date_for_db and final_status != 'Completed':
+            final_status = 'In Progress'
+
+        if not start_date_for_db and final_status == 'In Progress':
+            start_date_for_db = today
+
+        if final_status == 'Completed' and not completed_date_for_db:
+            completed_date_for_db = task_data['task_completed_date'] or today
+
+        if final_status != 'Completed':
+            completed_date_for_db = None
+
+        sql_update = text("""UPDATE tasks SET task_name=:name, status=:status, task_start_date=:start, 
+                             task_completed_date=:completed, due_date=:due, last_updated_by=:user, 
+                             last_updated_at=:now WHERE task_id=:task_id""")
+        conn.execute(sql_update, {"name": name, "status": final_status, "start": start_date_for_db,
+                                  "completed": completed_date_for_db, "due": due_date_for_db_str,
+                                  "user": updated_by_user, "now": datetime.now(), "task_id": int(task_id)})
+        conn.commit()
+
+    if case_id:
+        db_update_case_dates_from_tasks(case_id)
+
+        final_case_info = db_fetch_single_case(case_id)
+        if final_case_info and final_case_info.get('status') == 'Not Started' and final_case_info.get(
+                'start_date') is not None:
+            db_update_case_status_and_start_date(case_id, 'In Progress')
+            case_was_started_automatically = True
+
+        db_check_and_complete_case(case_id)
+        db_revert_case_if_inactive(case_id)
+
+    with get_db_connection() as conn:
+        sql_get_status = text("SELECT status FROM tasks WHERE task_id = :task_id")
+        final_task_status = conn.execute(sql_get_status, {"task_id": int(task_id)}).scalar_one()
+
+    return final_task_status, case_was_started_automatically
+
 
 def db_fetch_all_cases() -> pd.DataFrame:
     with get_db_connection() as conn:
@@ -51,10 +217,10 @@ def db_populate_tasks_from_template(case_id: int, case_type: str):
     if not case_type: return
     with get_db_connection() as conn:
         sql_select = text("""
-            SELECT tt.task_name, tt.default_status, tt.day_offset, tt.documents_required 
-            FROM task_templates tt 
-            JOIN template_types tty ON tt.template_type_id = tty.template_type_id 
-            WHERE tty.type_name = :case_type 
+            SELECT tt.task_name, tt.default_status, tt.day_offset, tt.documents_required, tt.task_sequence
+            FROM task_templates tt
+            JOIN template_types tty ON tt.template_type_id = tty.template_type_id
+            WHERE tty.type_name = :case_type
             ORDER BY tt.task_sequence
         """)
         template_tasks_df = pd.read_sql(sql_select, conn, params={"case_type": case_type})
@@ -67,14 +233,15 @@ def db_populate_tasks_from_template(case_id: int, case_type: str):
                 "task_name": row['task_name'],
                 "status": row['default_status'],
                 "day_offset": row['day_offset'],
-                "documents_required": row['documents_required']
+                "documents_required": row['documents_required'],
+                "task_sequence": float(row['task_sequence'])
             } for _, row in template_tasks_df.iterrows()
         ]
 
         if tasks_to_insert:
             sql_insert = text("""
-                INSERT INTO tasks (case_id, task_name, status, day_offset, documents_required) 
-                VALUES (:case_id, :task_name, :status, :day_offset, :documents_required)
+                INSERT INTO tasks (case_id, task_name, status, day_offset, documents_required, task_sequence)
+                VALUES (:case_id, :task_name, :status, :day_offset, :documents_required, :task_sequence)
             """)
             conn.execute(sql_insert, tasks_to_insert)
             conn.commit()
@@ -124,12 +291,12 @@ def db_fetch_tasks_for_case(case_id: int) -> pd.DataFrame:
     if not case_id: return pd.DataFrame()
     with get_db_connection() as conn:
         sql = text("""
-            SELECT task_id, task_name, status, due_date, day_offset, documents_required,
+            SELECT task_id, task_sequence, task_name, status, due_date, day_offset, documents_required,
                 to_char(task_start_date, 'YYYY-MM-DD') as task_start_date,
                 to_char(task_completed_date, 'YYYY-MM-DD') as task_completed_date,
                 last_updated_by,
                 to_char(last_updated_at, 'YYYY-MM-DD HH24:MI:SS') as last_updated_at_display
-            FROM tasks WHERE case_id = :case_id ORDER BY task_id ASC
+            FROM tasks WHERE case_id = :case_id ORDER BY task_sequence ASC, task_id ASC
         """)
         df = pd.read_sql(sql, conn, params={"case_id": case_id})
         if not df.empty:
@@ -152,10 +319,7 @@ def db_update_case_dates_from_tasks(case_id: int):
             "SELECT MIN(task_start_date) FROM tasks WHERE case_id = :case_id AND status IN ('In Progress', 'Completed')")
         min_task_start_date = conn.execute(sql_min_task_start, {"case_id": case_id}).scalar_one_or_none()
 
-        new_case_start_date = min_task_start_date if min_task_start_date else current_case_start_date
-
-        if new_case_start_date and new_case_start_date != current_case_start_date:
-            db_calculate_and_set_task_due_dates(case_id, new_case_start_date)
+        new_case_start_date = min_task_start_date
 
         sql_incomplete_count = text("SELECT COUNT(*) FROM tasks WHERE case_id = :case_id AND status != 'Completed'")
         incomplete_tasks_count = conn.execute(sql_incomplete_count, {"case_id": case_id}).scalar_one()
@@ -171,6 +335,10 @@ def db_update_case_dates_from_tasks(case_id: int):
             "UPDATE cases SET start_date = :start_date, completed_date = :completed_date WHERE case_id = :case_id")
         conn.execute(sql_update_case,
                      {"start_date": new_case_start_date, "completed_date": new_case_completed_date, "case_id": case_id})
+
+        if new_case_start_date and new_case_start_date != current_case_start_date:
+            db_calculate_and_set_task_due_dates(case_id, new_case_start_date)
+
         conn.commit()
 
 
@@ -219,71 +387,13 @@ def db_check_and_complete_case(case_id: int) -> bool:
         incomplete_count = conn.execute(sql_incomplete, {"case_id": int(case_id)}).scalar_one()
 
         if incomplete_count == 0:
-            sql_update_case = text("UPDATE cases SET status = 'Completed' WHERE case_id = :case_id")
-            conn.execute(sql_update_case, {"case_id": int(case_id)})
+            sql_update_case = text(
+                "UPDATE cases SET status = 'Completed', completed_date = :now WHERE case_id = :case_id")
+            conn.execute(sql_update_case, {"now": date.today(), "case_id": int(case_id)})
             conn.commit()
             db_update_case_dates_from_tasks(case_id)
             return True
     return False
-
-
-def db_update_task_details(task_id: int, name: str, status: str, start_date_input: Optional[str],
-                           completed_date_input: Optional[str], new_due_date_input_str: Optional[str],
-                           updated_by_user: str) -> Tuple[str, bool]:
-    today = date.today()
-    case_was_started_automatically = False
-
-    start_date_for_db = date.fromisoformat(start_date_input) if start_date_input else None
-    completed_date_for_db = date.fromisoformat(completed_date_input) if completed_date_input else None
-    due_date_for_db_str = new_due_date_input_str
-
-    with get_db_connection() as conn:
-        sql_select = text(
-            "SELECT case_id, status, task_start_date, task_completed_date, due_date FROM tasks WHERE task_id = :task_id")
-        result = conn.execute(sql_select, {"task_id": int(task_id)}).fetchone()
-        if not result: return status, False
-
-        task_data = result._asdict()
-        case_id = task_data['case_id']
-
-        final_status = status
-        if completed_date_for_db:
-            final_status = 'Completed'
-        elif start_date_for_db and final_status != 'Completed':
-            final_status = 'In Progress'
-
-        if not start_date_for_db and final_status == 'In Progress':
-            start_date_for_db = today
-
-        if final_status == 'Completed' and not completed_date_for_db:
-            completed_date_for_db = task_data['task_completed_date'] or today
-
-        if final_status != 'Completed':
-            completed_date_for_db = None
-
-        sql_update = text("""UPDATE tasks SET task_name=:name, status=:status, task_start_date=:start, 
-                             task_completed_date=:completed, due_date=:due, last_updated_by=:user, 
-                             last_updated_at=:now WHERE task_id=:task_id""")
-        conn.execute(sql_update, {"name": name, "status": final_status, "start": start_date_for_db,
-                                  "completed": completed_date_for_db, "due": due_date_for_db_str,
-                                  "user": updated_by_user, "now": datetime.now(), "task_id": int(task_id)})
-        conn.commit()
-
-    db_update_case_dates_from_tasks(case_id)
-
-    final_case_info = db_fetch_single_case(case_id)
-    if final_case_info and final_case_info.get('status') == 'Not Started' and final_case_info.get(
-            'start_date') is not None:
-        db_update_case_status_and_start_date(case_id, 'In Progress')
-        case_was_started_automatically = True
-
-    db_check_and_complete_case(case_id)
-
-    with get_db_connection() as conn:
-        sql_get_status = text("SELECT status FROM tasks WHERE task_id = :task_id")
-        final_task_status = conn.execute(sql_get_status, {"task_id": int(task_id)}).scalar_one()
-
-    return final_task_status, case_was_started_automatically
 
 
 def db_fetch_tasks_for_date(target_date: date) -> pd.DataFrame:
@@ -334,8 +444,8 @@ def db_fetch_tasks_for_template(template_type_id: int) -> pd.DataFrame:
     with get_db_connection() as conn:
         sql = text("""
             SELECT task_template_id, task_sequence, task_name, default_status, day_offset, documents_required
-            FROM task_templates 
-            WHERE template_type_id = :template_type_id 
+            FROM task_templates
+            WHERE template_type_id = :template_type_id
             ORDER BY task_sequence
         """)
         return pd.read_sql(sql, conn, params={"template_type_id": template_type_id})
@@ -344,7 +454,7 @@ def db_fetch_tasks_for_template(template_type_id: int) -> pd.DataFrame:
 def db_add_task_to_template(template_type_id: int, seq: int, name: str, status: str, offset: Optional[int],
                             documents: Optional[str]):
     sql = text("""
-        INSERT INTO task_templates (template_type_id, task_sequence, task_name, default_status, day_offset, documents_required) 
+        INSERT INTO task_templates (template_type_id, task_sequence, task_name, default_status, day_offset, documents_required)
         VALUES (:tt_id, :seq, :name, :status, :offset, :documents)
     """)
     with get_db_connection() as conn:
@@ -433,7 +543,6 @@ def db_fetch_attachments_for_task(task_id: int) -> pd.DataFrame:
         return pd.read_sql(sql, conn, params={"task_id": task_id})
 
 
-# --- DEFINITIVELY FIXED FUNCTION ---
 def _fetch_dashboard_data(from_date: date, to_date: date) -> Tuple[pd.DataFrame, pd.DataFrame]:
     with get_db_connection() as conn:
         sql_cases = text("""
@@ -450,20 +559,17 @@ def _fetch_dashboard_data(from_date: date, to_date: date) -> Tuple[pd.DataFrame,
                 lambda row: _calculate_case_performance(row['status'], row['case_due_date'], row['completed_date'],
                                                         row['overdue_tasks_count']), axis=1)
         else:
-            # Handle empty case
             cases_df = cases_df.assign(performance=[])
 
         sql_tasks = text(
             "SELECT t.task_id, t.task_name, t.status, t.due_date, t.task_completed_date FROM tasks t WHERE t.due_date BETWEEN :from_date AND :to_date")
         tasks_df = pd.read_sql(sql_tasks, conn, params={"from_date": from_date, "to_date": to_date})
 
-        # This block now correctly handles both empty and non-empty dataframes
         if not tasks_df.empty:
             tasks_df['performance'] = tasks_df.apply(
                 lambda row: _calculate_task_performance(row['status'], row['due_date'], row['task_completed_date']),
                 axis=1)
         else:
-            # If the dataframe is empty, ensure the 'performance' column exists
             tasks_df = tasks_df.assign(performance=[])
 
     return cases_df, tasks_df
@@ -526,3 +632,21 @@ def db_delete_attachment(attachment_id: int):
     with get_db_connection() as conn:
         conn.execute(sql, {"attachment_id": attachment_id})
         conn.commit()
+
+def db_update_template_type_name(template_type_id: int, new_name: str):
+    """Updates the name of a template type."""
+    with get_db_connection() as conn:
+        sql = text("UPDATE template_types SET type_name = :new_name WHERE template_type_id = :tt_id")
+        conn.execute(sql, {"new_name": new_name, "tt_id": template_type_id})
+        conn.commit()
+
+# In db/queries.py
+
+def db_fetch_single_template_type(template_type_id: int) -> Optional[str]:
+    """Fetches the name of a single template type by its ID."""
+    if not template_type_id:
+        return None
+    with get_db_connection() as conn:
+        sql = text("SELECT type_name FROM template_types WHERE template_type_id = :tt_id")
+        result = conn.execute(sql, {"tt_id": template_type_id}).scalar_one_or_none()
+        return result

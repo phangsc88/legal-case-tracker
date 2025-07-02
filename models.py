@@ -1,10 +1,14 @@
+# models.py
+
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, func, Boolean
+# --- ADD DECIMAL and text TO IMPORTS ---
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, func, Boolean, DECIMAL, text
 from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
-# --- User Table ---
+
+# --- User Table (Unchanged) ---
 class User(Base):
     __tablename__ = "users"
     user_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -13,7 +17,8 @@ class User(Base):
     privilege = Column(String(16), nullable=False, default='User')
     created_at = Column(DateTime, server_default=func.now())
 
-# --- Case Table ---
+
+# --- Case Table (Unchanged) ---
 class Case(Base):
     __tablename__ = "cases"
     case_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -26,11 +31,16 @@ class Case(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-# --- Task Table ---
+
+# --- Task Table (MODIFIED) ---
 class Task(Base):
     __tablename__ = "tasks"
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     case_id = Column(Integer, ForeignKey('cases.case_id'), nullable=False)
+
+    # --- ADD THIS NEW COLUMN FOR RE-ORDERING ---
+    task_sequence = Column(DECIMAL(10, 5), nullable=False, server_default=text("'0.0'"))
+
     task_name = Column(String(256), nullable=False)
     description = Column(Text)
     status = Column(String(32), nullable=False, default='Not Started')
@@ -45,25 +55,31 @@ class Task(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     case = relationship('Case')
 
-# --- TemplateType Table ---
+
+# --- TemplateType Table (Unchanged) ---
 class TemplateType(Base):
     __tablename__ = "template_types"
     template_type_id = Column(Integer, primary_key=True, autoincrement=True)
     type_name = Column(String(128), nullable=False, unique=True)
     created_at = Column(DateTime, server_default=func.now())
 
-# --- TaskTemplate Table (missing before!) ---
+
+# --- TaskTemplate Table (Unchanged) ---
 class TaskTemplate(Base):
     __tablename__ = "task_templates"
     task_template_id = Column(Integer, primary_key=True, autoincrement=True)
     template_type_id = Column(Integer, ForeignKey('template_types.template_type_id'), nullable=False)
-    task_sequence = Column(Integer, nullable=False)
+
+    # --- CHANGE THIS LINE FROM Integer TO DECIMAL ---
+    task_sequence = Column(DECIMAL(10, 5), nullable=False)
+
     task_name = Column(String(256), nullable=False)
     default_status = Column(String(32), nullable=False, default='Not Started')
     day_offset = Column(Integer)
     documents_required = Column(Text)
 
-# --- TaskAttachment Table ---
+
+# --- TaskAttachment Table (Unchanged) ---
 class TaskAttachment(Base):
     __tablename__ = "task_attachments"
     attachment_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -71,9 +87,10 @@ class TaskAttachment(Base):
     original_filename = Column(String(256), nullable=False)
     stored_filename = Column(String(256), nullable=False)
     uploaded_by = Column(String(64))
-    upload_timestamp = Column(DateTime, server_default=func.now())  # renamed for consistency with queries.py
+    upload_timestamp = Column(DateTime, server_default=func.now())
 
-# --- Remark Table (case_remarks for consistency with queries.py) ---
+
+# --- Remark Table (Unchanged) ---
 class CaseRemark(Base):
     __tablename__ = "case_remarks"
     remark_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -81,4 +98,3 @@ class CaseRemark(Base):
     user_name = Column(String(64))
     message = Column(Text)
     timestamp = Column(DateTime, server_default=func.now())
-
