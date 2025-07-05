@@ -1,5 +1,3 @@
-# app.py
-
 import os
 import uuid
 import base64
@@ -206,9 +204,30 @@ def build_template_tasks_container(template_id: int, privilege: str):
     is_admin = (privilege == 'Admin')
 
     if not tasks_df.empty:
+        tasks_df['documents_required_raw'] = tasks_df['documents_required']
+        tasks_df['documents_required'] = tasks_df['documents_required_raw'].apply(
+            lambda x: "View Documents" if pd.notna(x) and str(x).strip() != '' else ''
+        )
         if 'task_sequence' in tasks_df.columns:
             tasks_df['task_sequence'] = tasks_df['task_sequence'].astype(float)
         tasks_df['delete'] = 'X' if is_admin else None
+    else:
+        tasks_df = tasks_df.assign(documents_required_raw=[])
+
+    style_cell_conditional = [
+        {
+            'if': {'column_id': 'documents_required'},
+            'cursor': 'pointer',
+            'textDecoration': 'underline',
+            'color': DARK_THEME["colors"]["blue"][5]
+        },
+        {'if': {'column_id': 'documents_required_raw'}, 'display': 'none'},
+    ]
+    if is_admin:
+        style_cell_conditional.append({
+            'if': {'column_id': 'delete'}, 'cursor': 'pointer',
+            'textDecoration': 'underline', 'color': DARK_THEME["colors"]["red"][5]
+        })
 
     table = dash_table.DataTable(
         id='template-tasks-table',
@@ -218,14 +237,12 @@ def build_template_tasks_container(template_id: int, privilege: str):
             {"name": "Default Status", "id": "default_status"},
             {"name": "Documents Required", "id": "documents_required"},
             {"name": "Due Days Offset", "id": "day_offset"},
-            {"name": "Delete", "id": "delete"}
+            {"name": "Delete", "id": "delete"},
+            {"name": "", "id": "documents_required_raw"},
         ],
         data=tasks_df.to_dict('records'),
         **DATATABLE_STYLE_DARK,
-        style_cell_conditional=[
-            {'if': {'column_id': 'delete'}, 'cursor': 'pointer', 'textDecoration': 'underline',
-             'color': DARK_THEME["colors"]["red"][5]}
-        ] if is_admin else [],
+        style_cell_conditional=style_cell_conditional,
         editable=is_admin
     )
 
@@ -294,7 +311,12 @@ def build_templates_layout(privilege: str):
                 dmc.Button("Cancel", id="cancel-edit-template-type-btn", variant="outline"),
                 dmc.Button("Save Name", id="save-edit-template-type-btn", color="green")
             ]))
-        ], id="edit-template-type-modal", is_open=False, centered=True)
+        ], id="edit-template-type-modal", is_open=False, centered=True),
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle("Required Documents")),
+            dbc.ModalBody(id='template-documents-modal-body'),
+            dbc.ModalFooter(dbc.Button("Close", id="close-template-documents-modal-btn", className="ms-auto"))
+        ], id='template-documents-modal', is_open=False, centered=True, size="lg"),
     ])
 
 
@@ -303,16 +325,19 @@ def build_tasks_table_component(case_id: int, privilege: str):
     is_admin = (privilege == 'Admin')
 
     if not tasks_df.empty:
+        tasks_df['documents_required_raw'] = tasks_df['documents_required']
+        tasks_df['documents_required'] = tasks_df['documents_required_raw'].apply(
+            lambda x: "View Documents" if pd.notna(x) and str(x).strip() != '' else ''
+        )
         for col in tasks_df.columns:
             if tasks_df[col].dtype == 'object':
                 first_valid_idx = tasks_df[col].first_valid_index()
                 if first_valid_idx is not None and isinstance(tasks_df.loc[first_valid_idx, col], decimal.Decimal):
                     tasks_df[col] = tasks_df[col].astype(float)
-
         attachment_counts = [len(db_fetch_attachments_for_task(task_id)) for task_id in tasks_df['task_id']]
         tasks_df['attachments'] = [f"{count} file(s)" for count in attachment_counts]
     else:
-        tasks_df = tasks_df.assign(attachments=[])
+        tasks_df = tasks_df.assign(attachments=[], documents_required_raw=[])
 
     tasks_df['actions'] = "Edit"
     if is_admin:
@@ -332,18 +357,20 @@ def build_tasks_table_component(case_id: int, privilege: str):
         {"name": "Completed Date", "id": "task_completed_date"},
         {"name": "Last Updated By", "id": "last_updated_by"},
         {"name": "Edit", "id": "actions"},
+        {"name": "", "id": "documents_required_raw"},
     ]
-
     if is_admin:
         columns_to_display.append({"name": "Delete", "id": "delete"})
 
     style_cell_conditional = [
+        {'if': {'column_id': 'documents_required'},
+         'cursor': 'pointer', 'textDecoration': 'underline', 'color': DARK_THEME["colors"]["blue"][5]},
         {'if': {'column_id': 'actions'}, 'cursor': 'pointer', 'textDecoration': 'underline',
          'color': DARK_THEME["colors"]["blue"][5]},
         {'if': {'column_id': 'attachments'}, 'cursor': 'pointer', 'textDecoration': 'underline',
          'color': DARK_THEME["colors"]["blue"][3]},
+        {'if': {'column_id': 'documents_required_raw'}, 'display': 'none'},
     ]
-
     if is_admin:
         style_cell_conditional.append(
             {'if': {'column_id': 'delete'}, 'cursor': 'pointer', 'textDecoration': 'underline',
@@ -487,7 +514,12 @@ def build_case_detail_layout(case_id: int, username: str, privilege: str):
                         className="align-self-end")
             ]),
             html.Div(id='remarks-display-area', className="mt-3", children=build_remarks_display_component(case_id))
-        ]))
+        ])),
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle("Required Documents")),
+            dbc.ModalBody(id='detail-documents-modal-body'),
+            dbc.ModalFooter(dbc.Button("Close", id="close-detail-documents-modal-btn", className="ms-auto"))
+        ], id='detail-documents-modal', is_open=False, centered=True, size="lg"),
     ])
 
 
@@ -779,6 +811,8 @@ def cancel_case_modals(edit_cancel, delete_cancel):
     Output('attachment-task-id-store', 'data'),
     Output('attachment-modal-title', 'children'),
     Output('attachment-list-container', 'children'),
+    Output('detail-documents-modal', 'is_open', allow_duplicate=True),
+    Output('detail-documents-modal-body', 'children', allow_duplicate=True),
     Input('detail-tasks-table', 'active_cell'),
     Input('close-attachment-modal', 'n_clicks'),
     State('detail-tasks-table', 'data'),
@@ -786,39 +820,54 @@ def cancel_case_modals(edit_cancel, delete_cancel):
     prevent_initial_call=True
 )
 def handle_task_table_actions(active_cell, close_attach_clicks, data, attachment_is_open):
+    # Base state for all return values
     no_update_list = [
         False, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
         dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-        False, dash.no_update, False, dash.no_update, dash.no_update, dash.no_update
+        False, dash.no_update, False, dash.no_update, dash.no_update, dash.no_update,
+        False, dash.no_update  # New modal outputs
     ]
 
-    if ctx.triggered_id == 'close-attachment-modal': return no_update_list
-    if not active_cell or active_cell.get('row') is None: raise PreventUpdate
+    if ctx.triggered_id == 'close-attachment-modal':
+        return no_update_list
+
+    if not active_cell or active_cell.get('row') is None:
+        raise PreventUpdate
 
     col_id = active_cell['column_id']
     task_data = data[active_cell['row']]
-    task_id = task_data['task_id']
+    task_id = task_data.get('task_id')
 
-    if col_id == 'actions':
-        edit_outputs = [
-            True, task_id, task_data['task_name'], task_data['status'],
-            task_data.get('due_date'), task_data.get('due_date_display'),
-            task_data.get('task_start_date'), task_data.get('task_completed_date'),
-            task_data.get('documents_required')
-        ]
-        return edit_outputs + [False, dash.no_update, False, dash.no_update, dash.no_update, dash.no_update]
+    if col_id == 'actions' and task_id:
+        no_update_list[0] = True  # edit-task-modal is_open
+        no_update_list[1] = task_id
+        no_update_list[2] = task_data.get('task_name')
+        no_update_list[3] = task_data.get('status')
+        no_update_list[4] = task_data.get('due_date')
+        no_update_list[5] = task_data.get('due_date_display')
+        no_update_list[6] = task_data.get('task_start_date')
+        no_update_list[7] = task_data.get('task_completed_date')
+        no_update_list[8] = task_data.get('documents_required')
+        return no_update_list
 
-    elif col_id == 'delete':
-        delete_outputs = [False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-                          dash.no_update, dash.no_update, dash.no_update, True, task_id, False, dash.no_update,
-                          dash.no_update, dash.no_update]
-        return delete_outputs
+    elif col_id == 'delete' and task_id:
+        no_update_list[9] = True  # delete-task-modal is_open
+        no_update_list[10] = task_id
+        return no_update_list
 
-    elif col_id == 'attachments':
-        attachment_outputs = [False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-                              dash.no_update, dash.no_update, dash.no_update, False, dash.no_update, True, task_id,
-                              f"Attachments for: {task_data['task_name']}", build_attachments_list(task_id)]
-        return attachment_outputs
+    elif col_id == 'attachments' and task_id:
+        no_update_list[11] = True  # attachment-modal is_open
+        no_update_list[12] = task_id
+        no_update_list[13] = f"Attachments for: {task_data.get('task_name')}"
+        no_update_list[14] = build_attachments_list(task_id)
+        return no_update_list
+
+    elif col_id == 'documents_required':
+        doc_string = task_data.get('documents_required_raw', '')
+        if doc_string and isinstance(doc_string, str):
+            no_update_list[15] = True  # detail-documents-modal is_open
+            no_update_list[16] = html.Div(doc_string.replace(';', '\n'))
+        return no_update_list
 
     raise PreventUpdate
 
@@ -837,7 +886,7 @@ def handle_edit_task_modal_actions(save_clicks, session_data, task_id, case_id, 
     if not all([task_id, case_id, name, status]): return True, dbc.Alert("Task Name and Status cannot be empty.",
                                                                          color="warning"), *([dash.no_update] * 6)
     username, privilege = (session_data or {}).get('username', 'System'), (session_data or {}).get('privilege')
-    original_task = next((row for row in tasks_table_data if row["task_id"] == task_id), {});
+    original_task = next((row for row in tasks_table_data if row.get("task_id") == task_id), {});
     original_task_status = original_task.get("status", "N/A")
     due_date_to_pass = new_due_date if privilege == 'Admin' else None
     _, case_started = db_update_task_details(task_id, name, status, start_date, completed_date, due_date_to_pass,
@@ -921,23 +970,42 @@ def display_template_tasks(template_id, session_data):
 @app.callback(
     Output('template-tasks-container', 'children', allow_duplicate=True),
     Output('templates-alert-container', 'children', allow_duplicate=True),
-    Output('new-task-seq', 'value'), Output('new-task-name', 'value'),
-    Output('new-task-status', 'value'), Output('new-task-offset', 'value'),
+    Output('new-task-seq', 'value'),
+    Output('new-task-name', 'value'),
+    Output('new-task-status', 'value'),
+    Output('new-task-offset', 'value'),
     Output('new-task-documents', 'value'),
-    [Input('add-task-to-template-button', 'n_clicks'), Input('template-tasks-table', 'active_cell')],
-    [State('session-store', 'data'), State('selected-template-type-id-store', 'data'), State('new-task-seq', 'value'),
-     State('new-task-name', 'value'), State('new-task-status', 'value'), State('new-task-offset', 'value'),
-     State('new-task-documents', 'value'), State('template-tasks-table', 'data')],
+    Output('template-documents-modal', 'is_open'),
+    Output('template-documents-modal-body', 'children'),
+    Input('add-task-to-template-button', 'n_clicks'),
+    Input('template-tasks-table', 'active_cell'),
+    State('session-store', 'data'),
+    State('selected-template-type-id-store', 'data'),
+    State('new-task-seq', 'value'),
+    State('new-task-name', 'value'),
+    State('new-task-status', 'value'),
+    State('new-task-offset', 'value'),
+    State('new-task-documents', 'value'),
+    State('template-tasks-table', 'data'),
     prevent_initial_call=True
 )
 def handle_template_task_actions(add_clicks, active_cell, session_data, template_id, seq, name, status, offset,
                                  documents, table_data):
     privilege = (session_data or {}).get('privilege')
-    if privilege != 'Admin': return dash.no_update, dbc.Alert("You do not have permission to perform this action.",
-                                                              color="danger"), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-    triggered_id = ctx.triggered_id;
+    if privilege != 'Admin':
+        return [dash.no_update] * 7 + [False, None]
+
+    # Initialize default return values
     alert = dash.no_update
+    modal_open = False
+    modal_body = None
     seq_out, name_out, status_out, offset_out, documents_out = seq, name, status, offset, documents
+
+    triggered_id = ctx.triggered_id
+    if not triggered_id:
+        raise PreventUpdate
+
+    # Logic for the "Add Task" button
     if triggered_id == 'add-task-to-template-button':
         if not all([template_id, seq, name, status]):
             alert = dbc.Alert("Seq, Name, and Status are required.", color="warning")
@@ -945,14 +1013,34 @@ def handle_template_task_actions(add_clicks, active_cell, session_data, template
             db_add_task_to_template(template_id, seq, name, status, offset, documents)
             alert = dbc.Alert("Task added!", color="success", duration=3000)
             seq_out, name_out, status_out, offset_out, documents_out = None, '', 'Not Started', None, ''
-    elif triggered_id == 'template-tasks-table' and active_cell and active_cell['column_id'] == 'delete':
-        task_template_id = table_data[active_cell['row']]['task_template_id']
-        db_delete_task_from_template(task_template_id)
-        alert = dbc.Alert("Task removed!", color="success", duration=3000)
+
+    # Logic for clicking a cell in the table
+    elif triggered_id == 'template-tasks-table' and active_cell:
+        col_id = active_cell.get('column_id')
+        row_data = table_data[active_cell['row']]
+
+        if col_id == 'delete':
+            task_template_id = row_data['task_template_id']
+            db_delete_task_from_template(task_template_id)
+            alert = dbc.Alert("Task removed!", color="success", duration=3000)
+
+        elif col_id == 'documents_required':
+            doc_string = row_data.get('documents_required_raw', '')
+            if doc_string and isinstance(doc_string, str):
+                modal_open = True
+                modal_body = html.Div(doc_string.replace(';', '\n'))
+        else:
+            raise PreventUpdate
     else:
         raise PreventUpdate
-    return build_template_tasks_container(template_id,
-                                          privilege), alert, seq_out, name_out, status_out, offset_out, documents_out
+
+    # Return all outputs
+    return (
+        build_template_tasks_container(template_id, privilege),
+        alert, seq_out, name_out, status_out, offset_out, documents_out,
+        modal_open, modal_body
+    )
+
 
 
 @app.callback(Output('selected-template-type-id-store', 'data'),
@@ -1188,6 +1276,32 @@ def handle_edit_template_type_saving(save_clicks, cancel_clicks, edit_data, new_
     alert = dbc.Alert(f"Template type renamed to '{new_name}'.", color="success")
 
     return False, updated_list_items, alert
+
+
+# =============================================================================
+# MODAL CALLBACKS FOR VIEWING REQUIRED DOCUMENTS
+# =============================================================================
+
+@app.callback(
+    Output('template-documents-modal', 'is_open', allow_duplicate=True),
+    Input('close-template-documents-modal-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def close_template_documents_modal(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return False
+
+
+@app.callback(
+    Output('detail-documents-modal', 'is_open', allow_duplicate=True),
+    Input('close-detail-documents-modal-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def close_detail_documents_modal(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return False
 
 
 if __name__ == '__main__':
